@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.email         = ["ko1@atdot.net"]
   spec.summary       = %q{gc_tracer gem adds GC::Tracer module.}
   spec.description   = %q{gc_tracer gem adds GC::Tracer module.}
-  spec.homepage      = ""
+  spec.homepage      = "https://github.com/ko1/gc_tracer"
   spec.license       = "MIT"
 
   spec.extensions    = %w[ext/gc_tracer/extconf.rb]
