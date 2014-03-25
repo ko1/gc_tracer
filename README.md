@@ -1,7 +1,6 @@
-# GcTracer
+# GC::Tracer
 
-gc-tracer gem add GC::Tracer module which trace GC activities and output 
-all statistics information.
+Trace Garbage Collector activities and output statistics information.
 
 This gem only supports MRI 2.1.0 and later.
 
@@ -21,25 +20,32 @@ Or install it yourself as:
 
 ## Usage
 
-You can get GC statistics information like that:
+You can get GC statistics information in block form like this:
 
-    require 'gc_tracer'
-    GC::Tracer.start_logging(filename) do
-      # do something
-    end
+```ruby
+require 'gc_tracer'
+GC::Tracer.start_logging(filename) do
+  # do something
+end
+```
 
 This code is equivalent to the following code.
 
-    require 'gc_tracer'
-    GC::Tracer.start_logging(filename)
-    # do something
-    GC::Tracer.stop_logging
+```ruby
+require 'gc_tracer'
+GC::Tracer.start_logging(filename)
+# do something
+GC::Tracer.stop_logging
+```
 
-In the stored file, you can get tab separated values about GC.stat() and 
-GC.latest_gc_info() at each events.  Events are "GC starting time", "end 
-of marking time" and "end of sweeping time".  For one GC, three lines 
-you can get.
+In the stored file (filename), you can get tab separated values about
+`GC.stat()` and `GC.latest_gc_info()` at each events, there are one of:
 
+* GC starting time
+* End of marking time
+* End of sweeping time
+
+For one GC, you can get all three lines.
 
 ## Contributing
 
