@@ -53,4 +53,4 @@ you can get.
 ## Credit
 
 Originally created by Koichi Sasada.
-Thank you Yuki Torii to make gem package.
+Thank you Yuki Torii who helps me to make gem package.
