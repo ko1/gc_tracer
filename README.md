@@ -38,8 +38,13 @@ GC::Tracer.start_logging(filename)
 GC::Tracer.stop_logging
 ```
 
-In the stored file (filename), you can get tab separated values about
-`GC.stat()` and `GC.latest_gc_info()` at each events, there are one of:
+In the stored file (filename), you can get tab separated values of:
+
+* `GC.stat()`
+* `GC.latest_gc_info()`
+* `getrusage()` (if supported by system)
+
+at each events, there are one of:
 
 * GC starting time
 * End of marking time
