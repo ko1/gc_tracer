@@ -44,7 +44,7 @@ open("gc_tracer.h", 'w'){|f|
       f.puts "    sym_latest_gc_info[#{i}] = ID2SYM(rb_intern(\"#{k}\"));"
     }
     f.puts "    sym_rusage_timeval[0] = ID2SYM(rb_intern(\"ru_utime\"));"
-    f.puts "    sym_rusage_timeval[1] = ID2SYM(rb_intern(\"ru_utime\"));"
+    f.puts "    sym_rusage_timeval[1] = ID2SYM(rb_intern(\"ru_stime\"));"
     rusage_members.each.with_index{|k, i|
       f.puts "    sym_rusage[#{i}] = ID2SYM(rb_intern(\"#{k}\"));"
     }
