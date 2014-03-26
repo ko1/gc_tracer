@@ -15,9 +15,18 @@ static VALUE gc_trace_enabled;
 static FILE *gc_trace_out = NULL;
 static VALUE gc_trace_items, gc_trace_items_types;
 
+#ifdef HAVE_GETRUSAGE
+#include <sys/time.h>
+#include <sys/resource.h>
+#endif
+
 enum gc_key_type {
     GC_STAT_KEY,
-    GC_LATEST_GC_INFO_KEY
+    GC_LATEST_GC_INFO_KEY,
+#ifdef HAVE_GETRUSAGE
+    GC_RUSAGE_TIMEVAL_KEY,
+    GC_RUSAGE_KEY,
+#endif
 };
 
 /* the following code is only for internal tuning. */
@@ -129,10 +138,105 @@ out_header(void)
     out_terminate();
 }
 
+#ifdef HAVE_GETRUSAGE
+struct rusage_cache {
+    int cached;
+    struct rusage usage;
+};
+
+static void
+getursage_fill(struct rusage_cache *rusage_cache)
+{
+    if (!rusage_cache->cached) {
+	rusage_cache->cached = 1;
+	getrusage(RUSAGE_SELF, &rusage_cache->usage);
+    }
+}
+
+static double
+timeval2double(struct timeval *tv)
+{
+    return tv->tv_sec * 1000000 + tv->tv_usec;
+}
+
+static double
+getrusage_timeval(VALUE sym, struct rusage_cache *rusage_cache)
+{
+    getursage_fill(rusage_cache);
+
+    if (sym == sym_rusage_timeval[0]) {
+	return timeval2double(&rusage_cache->usage.ru_utime);
+    }
+    if (sym == sym_rusage_timeval[1]) {
+	return timeval2double(&rusage_cache->usage.ru_stime);
+    }
+
+    rb_raise(rb_eRuntimeError, "getrusage_timeval: unknown symbol");
+    return 0;
+}
+
+static size_t
+getrusage_sizet(VALUE sym, struct rusage_cache *rusage_cache)
+{
+    int i = 0;
+
+    getursage_fill(rusage_cache);
+
+#if HAVE_ST_RU_MAXRSS
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_maxrss;
+#endif
+#if HAVE_ST_RU_IXRSS
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_ixrss;
+#endif
+#if HAVE_ST_RU_IDRSS
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_idrss;
+#endif
+#if HAVE_ST_RU_ISRSS
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_isrss;
+#endif
+#if HAVE_ST_RU_MINFLT
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_minflt;
+#endif
+#if HAVE_ST_RU_MAJFLT
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_majflt;
+#endif
+#if HAVE_ST_RU_NSWAP
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_nswap;
+#endif
+#if HAVE_ST_RU_INBLOCK
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_inblock;
+#endif
+#if HAVE_ST_RU_OUBLOCK
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_oublock;
+#endif
+#if HAVE_ST_RU_MSGSND
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_msgsnd;
+#endif
+#if HAVE_ST_RU_MSGRCV
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_msgrcv;
+#endif
+#if HAVE_ST_RU_NSIGNALS
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_nsignals;
+#endif
+#if HAVE_ST_RU_NVCSW
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_nvcsw;
+#endif
+#if HAVE_ST_RU_NIVCSW
+    if (sym == sym_rusage[i++]) return rusage_cache->usage.ru_nivcsw;
+#endif
+
+    rb_raise(rb_eRuntimeError, "getrusage_sizet: unknown symbol");
+    return 0;
+}
+#endif
+
 static void
 trace(const char *type)
 {
     int i;
+#ifdef HAVE_GETRUSAGE
+    struct rusage_cache rusage_cache = {0};
+#endif
 
     out_tick();
     out_str(type);
@@ -148,6 +252,14 @@ trace(const char *type)
 	  case GC_LATEST_GC_INFO_KEY:
 	    out_obj(rb_gc_latest_gc_info(sym));
 	    break;
+#ifdef HAVE_GETRUSAGE
+	  case GC_RUSAGE_TIMEVAL_KEY:
+	    out_sizet((size_t)getrusage_timeval(sym, &rusage_cache));
+	    break;
+	  case GC_RUSAGE_KEY:
+	    out_sizet(getrusage_sizet(sym, &rusage_cache));
+	    break;
+#endif
 	  default:
 	    rb_bug("xyzzy");
 	}
@@ -244,12 +356,20 @@ static enum gc_key_type
 item_type(VALUE sym)
 {
     int i;
-    for (i=0; i<(int)(sizeof(sym_gc_stat)/sizeof(VALUE));i++) {
-	return GC_STAT_KEY;
+    for (i=0; i<(int)(sizeof(sym_gc_stat)/sizeof(VALUE)); i++) {
+	if (sym_gc_stat[i] == sym) return GC_STAT_KEY;
     }
-    for (i=0; i<(int)(sizeof(sym_latest_gc_info)/sizeof(VALUE));i++) {
-	return GC_LATEST_GC_INFO_KEY;
+    for (i=0; i<(int)(sizeof(sym_latest_gc_info)/sizeof(VALUE)); i++) {
+	if (sym_latest_gc_info[i] == sym) return GC_LATEST_GC_INFO_KEY;
     }
+#ifdef HAVE_GETRUSAGE
+    for (i=0; i<(int)(sizeof(sym_rusage_timeval)/sizeof(VALUE)); i++) {
+	if (sym_rusage_timeval[i] == sym) return GC_RUSAGE_TIMEVAL_KEY;
+    }
+    for (i=0; i<(int)(sizeof(sym_rusage)/sizeof(VALUE)); i++) {
+	if (sym_rusage[i] == sym) return GC_RUSAGE_KEY;
+    }
+#endif
     rb_raise(rb_eArgError, "Unknown key type");
     return 0; /* unreachable */
 }
@@ -260,19 +380,35 @@ gc_tracer_setup_logging(VALUE self, VALUE ary)
     int i;
     VALUE keys = rb_ary_new(), types = rb_ary_new();
 
-    if (!RB_TYPE_P(ary, T_ARRAY)) rb_raise(rb_eArgError, "unsupported argument");
+    if (NIL_P(ary)) { /* revert all settings */
+	int i;
 
-    for (i=0; i<RARRAY_LEN(ary); i++) {
-	VALUE sym = RARRAY_AREF(ary, i);
-	enum gc_key_type type;
-	if (!SYMBOL_P(sym)) rb_raise(rb_eArgError, "unsupported type");
-	type = item_type(sym);
-	rb_ary_push(keys, sym);
-	rb_ary_push(types, INT2FIX(type));
+#define ADD(syms) for (i=0; i<(int)(sizeof(syms)/sizeof(VALUE));i++) { \
+    rb_ary_push(gc_trace_items, syms[i]); \
+    rb_ary_push(gc_trace_items_types, INT2FIX(item_type(syms[i]))); \
+}
+	ADD(sym_gc_stat);
+	ADD(sym_latest_gc_info);
+#ifdef HAVE_GETRUSAGE
+	ADD(sym_rusage_timeval);
+	ADD(sym_rusage);
+#endif
     }
+    else {
+	if (!RB_TYPE_P(ary, T_ARRAY)) rb_raise(rb_eArgError, "unsupported argument");
 
-    rb_ary_replace(gc_trace_items, keys);
-    rb_ary_replace(gc_trace_items_types, types);
+	for (i=0; i<RARRAY_LEN(ary); i++) {
+	    VALUE sym = RARRAY_AREF(ary, i);
+	    enum gc_key_type type;
+	    if (!SYMBOL_P(sym)) rb_raise(rb_eArgError, "unsupported type");
+	    type = item_type(sym);
+	    rb_ary_push(keys, sym);
+	    rb_ary_push(types, INT2FIX(type));
+	}
+
+	rb_ary_replace(gc_trace_items, keys);
+	rb_ary_replace(gc_trace_items_types, types);
+    }
     return Qnil;
 }
 
@@ -296,15 +432,5 @@ Init_gc_tracer(void)
     rb_gc_register_mark_object(gc_trace_items);
     rb_gc_register_mark_object(gc_trace_items_types);
 
-    {
-	int i;
-	for (i=0; i<(int)(sizeof(sym_gc_stat)/sizeof(VALUE));i++) {
-	    rb_ary_push(gc_trace_items, sym_gc_stat[i]);
-	    rb_ary_push(gc_trace_items_types, INT2FIX(GC_STAT_KEY));
-	}
-	for (i=0; i<(int)(sizeof(sym_latest_gc_info)/sizeof(VALUE));i++) {
-	    rb_ary_push(gc_trace_items, sym_latest_gc_info[i]);
-	    rb_ary_push(gc_trace_items_types, INT2FIX(GC_LATEST_GC_INFO_KEY));
-	}
-    }
+    gc_tracer_setup_logging(Qnil, Qnil);
 }
