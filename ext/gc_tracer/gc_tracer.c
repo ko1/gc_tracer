@@ -412,6 +412,20 @@ gc_tracer_setup_logging(VALUE self, VALUE ary)
     return Qnil;
 }
 
+/**
+ * GC::Tracer traces GC/ObjectSpace behavior.
+ *
+ * == Logging
+ *
+ * GC::Tracer.start_logging(filename) prints GC/ObjectSpace
+ * information such as GC.stat/GC.latest_gc_info and the result
+ * of getrlimit() (if supported) into specified `filename' on
+ * each GC events.
+ *
+ * GC events are "start marking", "end of marking" and
+ * "end of sweeping". You should need to care about lazy sweep.
+ *
+ */
 void
 Init_gc_tracer(void)
 {
