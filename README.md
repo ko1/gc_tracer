@@ -20,6 +20,8 @@ Or install it yourself as:
 
 ## Usage
 
+### Logging
+
 You can get GC statistics information in block form like this:
 
 ```ruby
@@ -51,6 +53,28 @@ at each events, there are one of:
 * End of sweeping time
 
 For one GC, you can get all three lines.
+
+### ObjectSpace recorder
+
+You can records objspace snapshots on each events.  Snapshots are stored 
+in the [PPM (P6) format] (http://en.wikipedia.org/wiki/Netpbm_format).
+
+```ruby
+require 'gc_tracer'
+GC::Tracer.start_objspace_recording(dirname) do
+  # do something
+end
+```
+
+All PPM images are stored in dirname/ppm/.
+
+If you have netpbm package and pnmtopng command, 
+bin/objspace_recorder_convert.rb converts all ppm images into png files. 
+Converted png images stored into dirname/png/.
+
+You can view all converted png images with public/viewer.html.
+
+This feature is supported only latest Ruby versions (2.2, and later).
 
 ## Contributing
 
