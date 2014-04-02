@@ -11,3 +11,7 @@ Rake::ExtensionTask.new("gc_tracer", spec){|ext|
 RSpec::Core::RakeTask.new('spec' => 'compile')
 
 task default: :spec
+
+task :run => 'compile' do
+  ruby 'test.rb'
+end

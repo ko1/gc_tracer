@@ -8,10 +8,88 @@
 #include "ruby/ruby.h"
 #include "ruby/debug.h"
 #include "gc_tracer.h"
-#include "stdio.h"
+#include <stdio.h>
+#include <assert.h>
 
-static VALUE gc_start, gc_end_mark, gc_end_sweep;
-static VALUE gc_trace_enabled;
+struct gc_hooks {
+    VALUE hooks[3];
+    VALUE enabled;
+    void (*funcs[3])(void *data, int event_index);
+    void *args[3];
+    void *data;
+};
+
+static const char *event_names[] = {
+    "gc_start",
+    "gc_end_m",
+    "gc_end_s"
+};
+
+/* common funcs */
+
+static void
+gc_start_i(VALUE tpval, void *data)
+{
+    struct gc_hooks *hooks = (struct gc_hooks *)data;
+    (*hooks->funcs[0])(hooks->args[0], 0);
+}
+
+static void
+gc_end_mark_i(VALUE tpval, void *data)
+{
+    struct gc_hooks *hooks = (struct gc_hooks *)data;
+    (*hooks->funcs[1])(hooks->args[1], 1);
+}
+
+static void
+gc_end_sweep_i(VALUE tpval, void *data)
+{
+    struct gc_hooks *hooks = (struct gc_hooks *)data;
+    (*hooks->funcs[2])(hooks->args[2], 2);
+}
+
+static void
+create_gc_hooks(struct gc_hooks *hooks)
+{
+    if (hooks->hooks[0] == 0) {
+	int i;
+
+	hooks->hooks[0] = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_START,     gc_start_i,     hooks);
+	hooks->hooks[1] = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_END_MARK,  gc_end_mark_i,  hooks);
+	hooks->hooks[2] = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_END_SWEEP, gc_end_sweep_i, hooks);
+
+	/* mark for GC */
+	for (i=0; i<3; i++) rb_gc_register_mark_object(hooks->hooks[i]);
+    }
+}
+
+static void
+start_gc_hooks(struct gc_hooks *hooks)
+{
+    if (hooks->enabled == Qfalse) {
+	int i;
+	hooks->enabled = Qtrue;
+	for (i=0; i<3; i++) {
+	    rb_tracepoint_enable(hooks->hooks[i]);
+	}
+    }
+}
+
+static void
+stop_gc_hooks(struct gc_hooks *hooks)
+{
+    hooks->enabled = Qfalse;
+
+    if (hooks->hooks[0] != 0) {
+	rb_tracepoint_disable(hooks->hooks[0]);
+	rb_tracepoint_disable(hooks->hooks[1]);
+	rb_tracepoint_disable(hooks->hooks[2]);
+    }
+}
+
+/* logger */
+
+struct gc_hooks logger;
 static FILE *gc_trace_out = NULL;
 static VALUE gc_trace_items, gc_trace_items_types;
 
@@ -231,8 +309,9 @@ getrusage_sizet(VALUE sym, struct rusage_cache *rusage_cache)
 #endif
 
 static void
-trace(const char *type)
+trace(void *data, int event_index)
 {
+    const char *type = (const char *)data;
     int i;
 #ifdef HAVE_GETRUSAGE
     struct rusage_cache rusage_cache = {0};
@@ -268,39 +347,17 @@ trace(const char *type)
     out_terminate();
 }
 
-static void
-gc_start_i(VALUE tpval, void *data)
-{
-    trace("gc_start");
-}
-
-static void
-gc_end_mark_i(VALUE tpval, void *data)
-{
-    trace("gc_end_m");
-}
-
-static void
-gc_end_sweep_i(VALUE tpval, void *data)
-{
-    trace("gc_end_s");
-}
-
 static VALUE
 gc_tracer_stop_logging(VALUE self)
 {
-    if (gc_start != 0 && gc_trace_enabled != Qfalse) {
-	gc_trace_enabled = Qfalse;
-
+    if (logger.enabled) {
 	fflush(gc_trace_out);
 	if (gc_trace_out != stderr) {
 	    fclose(gc_trace_out);
 	}
 	gc_trace_out = NULL;
 
-	rb_tracepoint_disable(gc_start);
-	rb_tracepoint_disable(gc_end_mark);
-	rb_tracepoint_disable(gc_end_sweep);
+	stop_gc_hooks(&logger);
     }
 
     return Qnil;
@@ -309,20 +366,10 @@ gc_tracer_stop_logging(VALUE self)
 static VALUE
 gc_tracer_start_logging(int argc, VALUE *argv, VALUE self)
 {
-    if (gc_start == 0) {
-	gc_start = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_START, gc_start_i, 0);
-	gc_end_mark = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_END_MARK, gc_end_mark_i, 0);
-	gc_end_sweep = rb_tracepoint_new(0, RUBY_INTERNAL_EVENT_GC_END_SWEEP, gc_end_sweep_i, 0);
+    if (logger.enabled == Qfalse) {
+	int i;
 
-	/* mark for GC */
-	rb_gc_register_mark_object(gc_start);
-	rb_gc_register_mark_object(gc_end_mark);
-	rb_gc_register_mark_object(gc_end_sweep);
-    }
-
-    if (gc_trace_enabled == Qfalse) {
-	gc_trace_enabled = Qtrue;
-
+	/* setup with args */
 	if (argc == 0) {
 	    gc_trace_out = stderr;
 	}
@@ -338,11 +385,15 @@ gc_tracer_start_logging(int argc, VALUE *argv, VALUE self)
 	    rb_raise(rb_eArgError, "too many arguments");
 	}
 
-	rb_tracepoint_enable(gc_start);
-	rb_tracepoint_enable(gc_end_mark);
-	rb_tracepoint_enable(gc_end_sweep);
-
 	out_header();
+
+	for (i=0; i<3; i++) {
+	    logger.funcs[i] = trace;
+	    logger.args[i] = (void *)event_names[i];
+	}
+
+	create_gc_hooks(&logger);
+	start_gc_hooks(&logger);
 
 	if (rb_block_given_p()) {
 	    rb_ensure(rb_yield, Qnil, gc_tracer_stop_logging, Qnil);
@@ -412,6 +463,176 @@ gc_tracer_setup_logging(VALUE self, VALUE ary)
     return Qnil;
 }
 
+#ifdef HAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP
+/* image logging */
+
+/* secret API */
+void rb_objspace_each_objects_without_setup(int (*callback)(void *, void *, size_t, void *), void *data);
+
+static struct gc_hooks objspace_recorder;
+static int (*objspace_recorder_color_picker)(VALUE);
+static int HEAP_OBJ_LIMIT;
+
+struct objspace_recording_data {
+    FILE *fp;
+    int width, height;
+};
+
+static void
+set_color(unsigned char *buff, int color)
+{
+    buff[0] = (color >>  0) & 0xff;
+    buff[1] = (color >>  8) & 0xff;
+    buff[2] = (color >> 16) & 0xff;
+}
+
+static int
+categorical_color10(int n)
+{
+    const int colors[] = {
+	0x1f77b4,
+	0xff7f0e,
+	0x2ca02c,
+	0xd62728,
+	0x9467bd,
+	0x8c564b,
+	0xe377c2,
+	0x7f7f7f,
+	0xbcbd22,
+	0x17becf};
+    assert(n < 10);
+    return colors[n];
+}
+
+static int
+existance_color_picker(VALUE v) {
+    if (RB_TYPE_P(v, T_NONE)) {
+	return 0;
+    }
+    else {
+	if (OBJ_PROMOTED(v)) {
+	    /* old */
+	    return 1;
+	}
+	else {
+	    /* young */
+	    return 2;
+	}
+    }
+}
+
+static int
+objspace_recording_i(void *start, void *end, size_t stride, void *data)
+{
+    struct objspace_recording_data *rd = (struct objspace_recording_data *)data;
+    const int size = ((VALUE)end - (VALUE)start) / stride;
+    unsigned char *buff = ALLOCA_N(unsigned char, size * 3);
+    int i, write_result;
+
+    for (i=0; i<size; i++) {
+	VALUE v = (VALUE)start + i * stride;
+	int color_index = (*objspace_recorder_color_picker)(v);
+	set_color(&buff[i*3], categorical_color10(color_index));
+    }
+    for (; i<HEAP_OBJ_LIMIT; i++) {
+	set_color(&buff[i*3], 0);
+    }
+
+    write_result = fwrite(buff, 3, HEAP_OBJ_LIMIT, rd->fp);
+    rd->height++;
+
+    if (0) {
+	fprintf(stderr, "width: %d, write: %d\n", HEAP_OBJ_LIMIT, write_result);
+    }
+
+    return 0;
+}
+
+static void
+objspace_recording(void *data, int event_index)
+{
+    /* const char *event_name = (const char *)data; */
+    const char *dirname = (const char *)objspace_recorder.data;
+    char filename[1024];
+    FILE *fp;
+    struct objspace_recording_data rd;
+
+    snprintf(filename, 1024, "%s/ppm/%08d.%d.ppm", dirname, (int)rb_gc_count(), event_index);
+
+    if ((fp = fopen(filename, "w")) == NULL) {
+	rb_bug("objspace_recording: unable to open file: %s", filename);
+    }
+    rd.fp = fp;
+
+    /* making dummy header */
+    /*           MG width heigt dep */
+    fprintf(fp, "P6 wwwww hhhhh 255 ");
+
+    rd.width = HEAP_OBJ_LIMIT;
+    rd.height = 0;
+    rb_objspace_each_objects_without_setup(objspace_recording_i, &rd);
+
+    /* fill width and height */
+    fseek(fp, 3, SEEK_SET);
+    fprintf(fp, "%5d %5d", rd.width, rd.height);
+    fclose(fp);
+}
+
+static VALUE
+gc_tracer_stop_objspace_recording(VALUE self)
+{
+    if (objspace_recorder.enabled) {
+	ruby_xfree(objspace_recorder.data);
+	stop_gc_hooks(&objspace_recorder);
+    }
+    return Qnil;
+}
+
+static VALUE
+gc_tracer_start_objspace_recording(VALUE self, VALUE dirname)
+{
+    if (objspace_recorder.enabled == Qfalse) {
+	int i;
+	VALUE ppmdir;
+
+	/* setup */
+	if (rb_funcall(rb_cFile, rb_intern("directory?"), 1, dirname) != Qtrue) {
+	    rb_funcall(rb_cDir, rb_intern("mkdir"), 1, dirname);
+	}
+	if (rb_funcall(rb_cFile, rb_intern("directory?"), 1, (ppmdir = rb_str_plus(dirname, rb_str_new2("/ppm")))) != Qtrue) {
+	    rb_funcall(rb_cDir, rb_intern("mkdir"), 1, ppmdir);
+	}
+
+	objspace_recorder_color_picker = existance_color_picker;
+
+	HEAP_OBJ_LIMIT = FIX2INT(rb_hash_aref(
+	    rb_const_get(rb_mGC, rb_intern("INTERNAL_CONSTANTS")),
+	    ID2SYM(rb_intern("HEAP_OBJ_LIMIT"))));
+
+	for (i=0; i<3; i++) {
+	    objspace_recorder.funcs[i] = objspace_recording;
+	    objspace_recorder.args[i]  = (void *)event_names[i];
+	}
+
+	objspace_recorder.data = ruby_xmalloc(RSTRING_LEN(dirname) + 1);
+	strcpy((char *)objspace_recorder.data, RSTRING_PTR(dirname));
+
+	create_gc_hooks(&objspace_recorder);
+	start_gc_hooks(&objspace_recorder);
+
+	if (rb_block_given_p()) {
+	    rb_ensure(rb_yield, Qnil, gc_tracer_stop_objspace_recording, Qnil);
+	}
+    }
+    else {
+	rb_raise(rb_eRuntimeError, "recursive recording is not permitted");
+    }
+
+    return Qnil;
+}
+
+#endif /* HAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP */
+
 /**
  * GC::Tracer traces GC/ObjectSpace behavior.
  *
@@ -425,6 +646,9 @@ gc_tracer_setup_logging(VALUE self, VALUE ary)
  * GC events are "start marking", "end of marking" and
  * "end of sweeping". You should need to care about lazy sweep.
  *
+ * == ObjectSpace recorder
+ *
+ * This feature needs latest Ruby versions (2.2, and later).
  */
 void
 Init_gc_tracer(void)
@@ -435,6 +659,12 @@ Init_gc_tracer(void)
     rb_define_module_function(mod, "start_logging", gc_tracer_start_logging, -1);
     rb_define_module_function(mod, "stop_logging", gc_tracer_stop_logging, 0);
     rb_define_module_function(mod, "setup_logging", gc_tracer_setup_logging, 1);
+
+    /* recording methods */
+#ifdef HAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP
+    rb_define_module_function(mod, "start_objspace_recording", gc_tracer_start_objspace_recording, 1);
+    rb_define_module_function(mod, "stop_objspace_recording", gc_tracer_stop_objspace_recording, 1);
+#endif
 
     /* setup default banners */
     setup_gc_trace_symbols();

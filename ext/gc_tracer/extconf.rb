@@ -3,6 +3,18 @@ require 'mkmf'
 # auto generation script
 rusage_members = []
 
+if  try_link(%q{
+      #include "ruby/ruby.h"
+      void rb_objspace_each_objects_without_setup(int (*callback)(void *, void *, size_t, void *), void *data);
+      int main(int argc, char *argv[]){
+        rb_objspace_each_objects_without_setup(0, 0);
+        return 0;
+      }
+    })
+  #
+  $defs << "-DHAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP"
+end
+
 if have_header('sys/time.h') && have_header('sys/resource.h') && have_func('getrusage')
   %w(ru_maxrss
      ru_ixrss
