@@ -505,20 +505,83 @@ categorical_color10(int n)
 }
 
 static int
-existance_color_picker(VALUE v) {
+categorical_color20(int n)
+{
+    const int colors[] = {
+	0x1f77b4,
+	0xaec7e8,
+	0xff7f0e,
+	0xffbb78,
+	0x2ca02c,
+	0x98df8a,
+	0xd62728,
+	0xff9896,
+	0x9467bd,
+	0xc5b0d5,
+	0x8c564b,
+	0xc49c94,
+	0xe377c2,
+	0xf7b6d2,
+	0x7f7f7f,
+	0xc7c7c7,
+	0xbcbd22,
+	0xdbdb8d,
+	0x17becf,
+	0x9edae5,
+    };
+    assert(n < 20);
+    return colors[n];
+}
+
+static int
+object_age_picker(VALUE v) {
     if (RB_TYPE_P(v, T_NONE)) {
-	return 0;
+	return categorical_color10(0);
     }
     else {
 	if (OBJ_PROMOTED(v)) {
 	    /* old */
-	    return 1;
+	    return categorical_color10(1);
 	}
 	else {
 	    /* young */
-	    return 2;
+	    return categorical_color10(2);
 	}
     }
+}
+
+static int
+object_type_picker(VALUE v) {
+    int type = BUILTIN_TYPE(v);
+    int color = 0;
+    switch (type) {
+      case RUBY_T_NONE:
+      case RUBY_T_OBJECT:
+      case RUBY_T_CLASS:
+      case RUBY_T_MODULE:
+      case RUBY_T_FLOAT:
+      case RUBY_T_STRING:
+      case RUBY_T_REGEXP:
+      case RUBY_T_ARRAY:
+      case RUBY_T_HASH:
+      case RUBY_T_STRUCT:
+      case RUBY_T_BIGNUM:
+      case RUBY_T_FILE:
+      case RUBY_T_DATA:
+      case RUBY_T_MATCH:
+      case RUBY_T_COMPLEX:
+      case RUBY_T_RATIONAL: /* 0x0f */
+	color = type;
+	break;
+      case RUBY_T_NODE:
+      case RUBY_T_ICLASS:
+      case RUBY_T_ZOMBIE:
+	color = type - 11;
+	break;
+      default:
+	rb_bug("object_type_picker: unreachable (type: %d)", type);
+    }
+    return categorical_color20(color);
 }
 
 static int
@@ -531,8 +594,7 @@ objspace_recording_i(void *start, void *end, size_t stride, void *data)
 
     for (i=0; i<size; i++) {
 	VALUE v = (VALUE)start + i * stride;
-	int color_index = (*objspace_recorder_color_picker)(v);
-	set_color(&buff[i*3], categorical_color10(color_index));
+	set_color(&buff[i*3], (*objspace_recorder_color_picker)(v));
     }
     for (; i<HEAP_OBJ_LIMIT; i++) {
 	set_color(&buff[i*3], 0);
@@ -589,11 +651,23 @@ gc_tracer_stop_objspace_recording(VALUE self)
 }
 
 static VALUE
-gc_tracer_start_objspace_recording(VALUE self, VALUE dirname)
+gc_tracer_start_objspace_recording(int argc, VALUE *argv, VALUE self)
 {
     if (objspace_recorder.enabled == Qfalse) {
 	int i;
 	VALUE ppmdir;
+	VALUE dirname;
+	VALUE picker_type = ID2SYM(rb_intern("age"));
+
+	switch (argc) {
+	  case 2:
+	    picker_type = argv[1];
+	  case 1:
+	    dirname = argv[0];
+	    break;
+	  default:
+	    rb_raise(rb_eArgError, "expect 1 or 2 arguments, but %d", argc);
+	}
 
 	/* setup */
 	if (rb_funcall(rb_cFile, rb_intern("directory?"), 1, dirname) != Qtrue) {
@@ -603,7 +677,15 @@ gc_tracer_start_objspace_recording(VALUE self, VALUE dirname)
 	    rb_funcall(rb_cDir, rb_intern("mkdir"), 1, ppmdir);
 	}
 
-	objspace_recorder_color_picker = existance_color_picker;
+	if (picker_type == ID2SYM(rb_intern("age"))) {
+	    objspace_recorder_color_picker = object_age_picker;
+	}
+	else if (picker_type == ID2SYM(rb_intern("type"))) {
+	    objspace_recorder_color_picker = object_type_picker;
+	}
+	else {
+	    rb_raise(rb_eArgError, "unsupported picker type: %s", rb_id2name(SYM2ID(picker_type)));
+	}
 
 	HEAP_OBJ_LIMIT = FIX2INT(rb_hash_aref(
 	    rb_const_get(rb_mGC, rb_intern("INTERNAL_CONSTANTS")),
@@ -662,8 +744,8 @@ Init_gc_tracer(void)
 
     /* recording methods */
 #ifdef HAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP
-    rb_define_module_function(mod, "start_objspace_recording", gc_tracer_start_objspace_recording, 1);
-    rb_define_module_function(mod, "stop_objspace_recording", gc_tracer_stop_objspace_recording, 1);
+    rb_define_module_function(mod, "start_objspace_recording", gc_tracer_start_objspace_recording, -1);
+    rb_define_module_function(mod, "stop_objspace_recording", gc_tracer_stop_objspace_recording, 0);
 #endif
 
     /* setup default banners */
