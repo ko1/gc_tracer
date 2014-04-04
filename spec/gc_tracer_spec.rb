@@ -39,6 +39,8 @@ describe GC::Tracer do
           }
         }
         expect(Dir.glob("#{DIRNAME}/ppm/*.ppm").size).to be >= count * 3
+      rescue NoMethodError
+        pending "start_objspace_recording requires MRI >= 2.2"
       ensure
         FileUtils.rm_rf(DIRNAME) if File.directory?(DIRNAME)
       end
