@@ -5,7 +5,7 @@ require 'gc_tracer/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "gc_tracer"
-  spec.version       = GcTracer::VERSION
+  spec.version       = GC::Tracer::VERSION
   spec.authors       = ["Koichi Sasada"]
   spec.email         = ["ko1@atdot.net"]
   spec.summary       = %q{gc_tracer gem adds GC::Tracer module.}
