@@ -72,9 +72,35 @@ If you have netpbm package and pnmtopng command,
 bin/objspace_recorder_convert.rb converts all ppm images into png files. 
 Converted png images stored into dirname/png/.
 
-You can view all converted png images with public/viewer.html.
+To view converted images, "dirname/viewer.html" is created.
+You can view all converted png images with "dirname/viewer.html" file in animation.
 
 This feature is supported only latest Ruby versions (2.2, and later).
+
+#### Examaple
+
+```ruby
+require 'gc_tracer'
+GC::Tracer.start_objspace_recording("objspace_recorded_type_example", :type){
+  n =  1_000
+  m = 10_000
+
+  n.times{
+    ary = []
+    m.times{
+      ary << ''
+    }
+  }
+}
+```
+
+This program takes all snapshot of type information at each GC events.
+
+- :age (default) - take snapshots of age information (empty/young/old/shady)
+- :type - take snapshots of type information (T_???)
+
+You can see an [age example] (http://www.atdot.net/~ko1/gc_tracer/objspace_recorded_age_example/viewer.html) and
+a [type example] (http://www.atdot.net/~ko1/gc_tracer/objspace_recorded_type_example/viewer.html).
 
 ## Contributing
 

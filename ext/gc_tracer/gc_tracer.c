@@ -478,77 +478,119 @@ struct objspace_recording_data {
     int width, height;
 };
 
+struct picker_description {
+    const char *name;
+    const int color;
+};
+
 static void
 set_color(unsigned char *buff, int color)
 {
-    buff[0] = (color >>  0) & 0xff;
+    buff[2] = (color >>  0) & 0xff;
     buff[1] = (color >>  8) & 0xff;
-    buff[2] = (color >> 16) & 0xff;
+    buff[0] = (color >> 16) & 0xff;
 }
+
+const int categorical_color10_colors[] = {
+    0x1f77b4,
+    0xff7f0e,
+    0x2ca02c,
+    0xd62728,
+    0x9467bd,
+    0x8c564b,
+    0xe377c2,
+    0x7f7f7f,
+    0xbcbd22,
+    0x17becf
+};
 
 static int
 categorical_color10(int n)
 {
-    const int colors[] = {
-	0x1f77b4,
-	0xff7f0e,
-	0x2ca02c,
-	0xd62728,
-	0x9467bd,
-	0x8c564b,
-	0xe377c2,
-	0x7f7f7f,
-	0xbcbd22,
-	0x17becf};
     assert(n < 10);
-    return colors[n];
+    return categorical_color10_colors[n];
 }
+
+const int categorical_color20_colors[] = {
+    0x1f77b4,
+    0xaec7e8,
+    0xff7f0e,
+    0xffbb78,
+    0x2ca02c,
+    0x98df8a,
+    0xd62728,
+    0xff9896,
+    0x9467bd,
+    0xc5b0d5,
+    0x8c564b,
+    0xc49c94,
+    0xe377c2,
+    0xf7b6d2,
+    0x7f7f7f,
+    0xc7c7c7,
+    0xbcbd22,
+    0xdbdb8d,
+    0x17becf,
+    0x9edae5,
+};
 
 static int
 categorical_color20(int n)
 {
-    const int colors[] = {
-	0x1f77b4,
-	0xaec7e8,
-	0xff7f0e,
-	0xffbb78,
-	0x2ca02c,
-	0x98df8a,
-	0xd62728,
-	0xff9896,
-	0x9467bd,
-	0xc5b0d5,
-	0x8c564b,
-	0xc49c94,
-	0xe377c2,
-	0xf7b6d2,
-	0x7f7f7f,
-	0xc7c7c7,
-	0xbcbd22,
-	0xdbdb8d,
-	0x17becf,
-	0x9edae5,
-    };
     assert(n < 20);
-    return colors[n];
+    return categorical_color20_colors[n];
 }
+
+static struct picker_description object_age_picker_description[] = {
+    {"empty slot",   0},
+    {"old slot",     0x1f77b4},
+    {"young slot",   0xff7f0e},
+    {"shady slot",   0x2ca02c}
+};
 
 static int
 object_age_picker(VALUE v) {
     if (RB_TYPE_P(v, T_NONE)) {
-	return categorical_color10(0);
+	return 0;
     }
     else {
 	if (OBJ_PROMOTED(v)) {
 	    /* old */
-	    return categorical_color10(1);
+	    return categorical_color10(0);
 	}
 	else {
-	    /* young */
-	    return categorical_color10(2);
+	    if (OBJ_WB_PROTECTED(v)) {
+		/* young */
+		return categorical_color10(1);
+	    }
+	    else {
+		return categorical_color10(2);
+	    }
 	}
     }
 }
+
+static struct picker_description object_type_picker_description[] = {
+    {"RUBY_T_NONE", 0},
+    {"RUBY_T_OBJECT", 0x1f77b4},
+    {"RUBY_T_CLASS", 0xaec7e8},
+    {"RUBY_T_MODULE", 0xff7f0e},
+    {"RUBY_T_FLOAT", 0xffbb78},
+    {"RUBY_T_STRING", 0x2ca02c},
+    {"RUBY_T_REGEXP", 0x98df8a},
+    {"RUBY_T_ARRAY", 0xd62728},
+    {"RUBY_T_HASH", 0xff9896},
+    {"RUBY_T_STRUCT", 0x9467bd},
+    {"RUBY_T_BIGNUM", 0xc5b0d5},
+    {"RUBY_T_FILE", 0x8c564b},
+    {"RUBY_T_DATA", 0xc49c94},
+    {"RUBY_T_MATCH", 0xe377c2},
+    {"RUBY_T_COMPLEX", 0xf7b6d2},
+    {"RUBY_T_RATIONAL", 0x7f7f7f},
+    {"RUBY_T_NODE", 0xc7c7c7},
+    {"RUBY_T_ICLASS", 0xbcbd22},
+    {"RUBY_T_ZOMBIE", 0xdbdb8d},
+};
 
 static int
 object_type_picker(VALUE v) {
@@ -556,6 +598,7 @@ object_type_picker(VALUE v) {
     int color = 0;
     switch (type) {
       case RUBY_T_NONE:
+	return 0;
       case RUBY_T_OBJECT:
       case RUBY_T_CLASS:
       case RUBY_T_MODULE:
@@ -571,12 +614,12 @@ object_type_picker(VALUE v) {
       case RUBY_T_MATCH:
       case RUBY_T_COMPLEX:
       case RUBY_T_RATIONAL: /* 0x0f */
-	color = type;
+	color = type - 1;
 	break;
       case RUBY_T_NODE:
       case RUBY_T_ICLASS:
       case RUBY_T_ZOMBIE:
-	color = type - 11;
+	color = type - 12;
 	break;
       default:
 	rb_bug("object_type_picker: unreachable (type: %d)", type);
@@ -650,6 +693,27 @@ gc_tracer_stop_objspace_recording(VALUE self)
     return Qnil;
 }
 
+static void
+puts_color_description(VALUE dirname, struct picker_description desc[], int n)
+{
+    char buff[0x200];
+    FILE *fp;
+    int i;
+
+    snprintf(buff, 0x200, "%s/color_description.txt", RSTRING_PTR(dirname));
+
+    if ((fp = fopen(buff, "w")) == NULL) {
+	rb_raise(rb_eRuntimeError, "puts_color_description: failed to open file");
+    }
+
+    for (i=0; i<n; i++) {
+	fprintf(fp, "%s\t#%06x\n", desc[i].name, desc[i].color);
+    }
+
+    fclose(fp);
+}
+
+
 static VALUE
 gc_tracer_start_objspace_recording(int argc, VALUE *argv, VALUE self)
 {
@@ -679,9 +743,11 @@ gc_tracer_start_objspace_recording(int argc, VALUE *argv, VALUE self)
 
 	if (picker_type == ID2SYM(rb_intern("age"))) {
 	    objspace_recorder_color_picker = object_age_picker;
+	    puts_color_description(dirname, &object_age_picker_description[0], sizeof(object_age_picker_description) / sizeof(struct picker_description));
 	}
 	else if (picker_type == ID2SYM(rb_intern("type"))) {
 	    objspace_recorder_color_picker = object_type_picker;
+	    puts_color_description(dirname, &object_type_picker_description[0], sizeof(object_type_picker_description) / sizeof(struct picker_description));
 	}
 	else {
 	    rb_raise(rb_eArgError, "unsupported picker type: %s", rb_id2name(SYM2ID(picker_type)));

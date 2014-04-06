@@ -1,0 +1,80 @@
+﻿<html>
+  <head>
+    <meta charset="utf-8">
+    <script src="./jquery-2.1.0.min.js"></script>
+
+<script>
+
+function startAnimation(){
+    var start = Number($("#start").val());
+    var end = Number($("#end").val());
+    var sleep_time = Number($("#wait").val());
+    var i = start, j = 0;
+
+    var timer_func = function(){
+        image_path = "./png/" +  ("00000000"+i).slice(-8) + "." + j + ".ppm.png";
+        $("#view").attr({
+          src: image_path
+        });
+        $("#status").text(image_path);
+
+        if (j < 2) {
+            j += 1;
+        }
+        else {
+            if (i < end) {
+                i += 1;
+                j = 0;
+            }
+            else{
+                return false;
+            }
+        }
+        setTimeout(timer_func, sleep_time);
+    }
+
+    timer_func();
+}
+
+var color_description = [
+<%= color_description_js %>
+];
+
+function reloadConfig() {
+    $("#color_desc_table").remove();
+    $("#config").after("<table id='color_desc_table'></table>");
+
+    for (var i = 0; i < color_description.length; i++) {
+        $("#color_desc_table").before(
+            "<tr>" + 
+            "<td style='background-color: " + color_description[i].color + "' hspace='1em' width='100px'>" +
+            "<td> " + color_description[i].desc + "</td>" + 
+            "</tr>");
+    }
+}
+
+$(function(){
+    reloadConfig();
+    $("#submit").click(
+        function(){
+            startAnimation();
+        });
+});
+
+</script>
+  </head>
+  <body>
+    <div>
+      <div id='config'>
+	start: <input type='text' id='start' value='<%= first_gc_count %>' readonly>,
+	end: <input type='text' id='end' value='<%= last_gc_count %>' readonly>
+      </div>
+    </div>
+    <p>
+      <input type='submit' id='submit' value='start!'>
+      wait: <input type='text' id='wait' value='100'>
+      <span id='status'></span>
+    </p>
+    <img id='view'>
+  </body>
+</html>
