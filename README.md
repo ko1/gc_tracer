@@ -77,7 +77,7 @@ You can view all converted png images with "dirname/viewer.html" file in animati
 
 This feature is supported only latest Ruby versions (2.2, and later).
 
-#### Examaple
+#### Example
 
 ```ruby
 require 'gc_tracer'
