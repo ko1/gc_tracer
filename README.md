@@ -54,6 +54,65 @@ at each events, there are one of:
 
 For one GC, you can get all three lines.
 
+### Allocation tracing
+
+You can trace allocation information and you can get aggregated information.
+
+```ruby
+require 'gc_tracer'
+require 'pp'
+
+pp GC::Tracer.start_allocation_tracing{
+  50_000.times{|i|
+    i.to_s
+    i.to_s
+    i.to_s
+  }
+}
+```
+
+will show
+
+```
+{["test.rb", 6]=>[50000, 44290, 0, 6],
+ ["test.rb", 7]=>[50000, 44289, 0, 5],
+ ["test.rb", 8]=>[50000, 44295, 0, 6]}
+```
+
+In this case, 50,000 objects are created at `test.rb:6'. 44,290 is total 
+age of objects created at this line. Average age of object created at 
+this line is 50000/44290 = 0.8858. 0 is minimum age and 6 is maximum age.
+
+Simply you can require `gc_tracer/allocation_trace' to start allocation 
+tracer and output the aggregated information into stdot at the end of 
+program.
+
+```ruby
+require 'gc_tracer/allocation_trace'
+
+# Run your program here
+50_000.times{|i|
+  i.to_s
+  i.to_s
+  i.to_s
+}
+```
+
+and you will see:
+
+```
+file    line    count   total_age       max_age min_age
+.../lib/ruby/2.2.0/rubygems/core_ext/kernel_require.rb 55      18      23      1       6
+.../gc_tracer/lib/gc_tracer/allocation_trace.rb    5       2       12      6       6
+.../gc_tracer/lib/gc_tracer/allocation_trace.rb    6       2       0       0       0
+test.rb 0       1       0       0       0
+test.rb 5       50000   41574   0       5
+test.rb 6       50000   41566   0       4
+test.rb 7       50000   41574   0       5
+```
+
+(tab separated colums)
+
 ### ObjectSpace recorder
 
 You can records objspace snapshots on each events.  Snapshots are stored 
