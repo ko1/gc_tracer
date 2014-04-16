@@ -119,6 +119,10 @@ test.rb 7       50000   41574   0       5
 
 (tab separated colums)
 
+This feature is similar to https://github.com/SamSaffron/memory_profiler 
+and https://github.com/srawlins/allocation_stats. But this feature 
+focused on `age' of objects.
+
 ### ObjectSpace recorder
 
 You can records objspace snapshots on each events.  Snapshots are stored 
