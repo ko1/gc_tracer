@@ -781,6 +781,10 @@ gc_tracer_start_objspace_recording(int argc, VALUE *argv, VALUE self)
 
 #endif /* HAVE_RB_OBJSPACE_EACH_OBJECTS_WITHOUT_SETUP */
 
+VALUE gc_tracer_start_allocation_tracing(int argc, VALUE *argv, VALUE self);
+VALUE gc_tracer_stop_allocation_tracing(VALUE self);
+VALUE rb_mGCTracer;
+
 /**
  * GC::Tracer traces GC/ObjectSpace behavior.
  *
@@ -801,7 +805,7 @@ gc_tracer_start_objspace_recording(int argc, VALUE *argv, VALUE self)
 void
 Init_gc_tracer(void)
 {
-    VALUE mod = rb_define_module_under(rb_mGC, "Tracer");
+    VALUE mod = rb_mGCTracer = rb_define_module_under(rb_mGC, "Tracer");
 
     /* logging methods */
     rb_define_module_function(mod, "start_logging", gc_tracer_start_logging, -1);
@@ -813,6 +817,10 @@ Init_gc_tracer(void)
     rb_define_module_function(mod, "start_objspace_recording", gc_tracer_start_objspace_recording, -1);
     rb_define_module_function(mod, "stop_objspace_recording", gc_tracer_stop_objspace_recording, 0);
 #endif
+
+    /* allocation tracer methods */
+    rb_define_module_function(mod, "start_allocation_tracing", gc_tracer_start_allocation_tracing, -1);
+    rb_define_module_function(mod, "stop_allocation_tracing", gc_tracer_stop_allocation_tracing, 0);
 
     /* setup default banners */
     setup_gc_trace_symbols();
