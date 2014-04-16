@@ -20,6 +20,12 @@ Or install it yourself as:
 
 ## Usage
 
+gc_tracer gem adds GC::Tracer module. GC::Tracer module has the following features.
+
+- Logging GC statistics information
+- Allocation tracing information
+- ObjectSpace recorder
+
 ### Logging
 
 You can get GC statistics information in block form like this:

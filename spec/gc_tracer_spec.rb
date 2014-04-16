@@ -29,20 +29,20 @@ describe GC::Tracer do
   end
 
   shared_examples "objspace_recorder_test" do
-    DIRNAME = "gc_tracer_objspace_recorder_spec.#{$$}"
+    dirname = "gc_tracer_objspace_recorder_spec.#{$$}"
 
     it do
       begin
-        GC::Tracer.start_objspace_recording(DIRNAME){
+        GC::Tracer.start_objspace_recording(dirname){
           count.times{
             GC.start
           }
         }
-        expect(Dir.glob("#{DIRNAME}/ppm/*.ppm").size).to be >= count * 3
+        expect(Dir.glob("#{dirname}/ppm/*.ppm").size).to be >= count * 3
       rescue NoMethodError
         pending "start_objspace_recording requires MRI >= 2.2"
       ensure
-        FileUtils.rm_rf(DIRNAME) if File.directory?(DIRNAME)
+        FileUtils.rm_rf(dirname) if File.directory?(dirname)
       end
     end
   end
@@ -55,5 +55,17 @@ describe GC::Tracer do
   context "2 GC.start" do
     let(:count){2}
     it_behaves_like "objspace_recorder_test"
+  end
+
+  describe 'GC::Tracer.start_allocation_tracing' do
+    it do
+      line = __LINE__ + 2
+      result = GC::Tracer.start_allocation_tracing do
+        Object.new
+      end
+
+      expect(result.length).to be >= 1
+      expect(result[[__FILE__, line]]).to eq [1, 0, 0, 0]
+    end
   end
 end
