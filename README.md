@@ -89,6 +89,64 @@ In this case, 50,000 objects are created at `test.rb:6'. 44,290 is total
 age of objects created at this line. Average age of object created at 
 this line is 50000/44290 = 0.8858. 0 is minimum age and 6 is maximum age.
 
+You can also specify `type' in GC::Tracer.setup_allocation_tracing() to 
+specify what should be keys to aggregate like that.
+
+```ruby
+require 'gc_tracer'
+require 'pp'
+
+GC::Tracer.setup_allocation_tracing(%i{path line type})
+
+result = GC::Tracer.start_allocation_tracing do
+  50_000.times{|i|
+    a = [i.to_s]
+    b = {i.to_s => nil}
+    c = (i.to_s .. i.to_s)
+  }
+end
+
+pp result
+```
+
+and you will get:
+
+```
+{["test.rb", 8, :T_STRING]=>[50000, 49067, 0, 17],
+ ["test.rb", 8, :T_ARRAY]=>[50000, 49053, 0, 17],
+ ["test.rb", 9, :T_STRING]=>[100000, 98146, 0, 17],
+ ["test.rb", 9, :T_HASH]=>[50000, 49111, 0, 17],
+ ["test.rb", 10, :T_STRING]=>[100000, 98267, 0, 17],
+ ["test.rb", 10, :T_STRUCT]=>[50000, 49126, 0, 17]}
+```
+
+Interestingly, you can not see array creations in a middle of block:
+
+```ruby
+require 'gc_tracer'
+require 'pp'
+
+GC::Tracer.setup_allocation_tracing(%i{path line type})
+
+result = GC::Tracer.start_allocation_tracing do
+  50_000.times{|i|
+    [i.to_s]
+    nil
+  }
+end
+
+pp result
+```
+
+and it prints:
+
+```
+{["test.rb", 8, :T_STRING]=>[50000, 38322, 0, 2]}
+```
+
+There are only string creation. This is because unused array creation is 
+ommitted by optimizer.
+
 Simply you can require `gc_tracer/allocation_trace' to start allocation 
 tracer and output the aggregated information into stdot at the end of 
 program.
