@@ -4,7 +4,7 @@ require 'fileutils'
 
 describe GC::Tracer do
   shared_examples "logging_test" do
-    it do
+    it 'should output correctly into file' do
       Dir.mktmpdir('gc_tracer'){|dir|
         logfile = "#{dir}/logging"
         GC::Tracer.start_logging(logfile){
@@ -31,7 +31,7 @@ describe GC::Tracer do
   shared_examples "objspace_recorder_test" do
     dirname = "gc_tracer_objspace_recorder_spec.#{$$}"
 
-    it do
+    it 'should output snapshots correctly into directory' do
       begin
         GC::Tracer.start_objspace_recording(dirname){
           count.times{
@@ -58,7 +58,17 @@ describe GC::Tracer do
   end
 
   describe 'GC::Tracer.start_allocation_tracing' do
-    it do
+    it 'should includes allocation information' do
+      line = __LINE__ + 2
+      result = GC::Tracer.start_allocation_tracing do
+        Object.new
+      end
+
+      expect(result.length).to be >= 1
+      expect(result[[__FILE__, line]]).to eq [1, 0, 0, 0]
+    end
+
+    it 'should run twice' do
       line = __LINE__ + 2
       result = GC::Tracer.start_allocation_tracing do
         Object.new

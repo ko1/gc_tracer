@@ -13,19 +13,29 @@ struct allocation_info {
     int living;
     VALUE flags;
     VALUE klass;
+    const char *klass_path;
+    size_t generation;
 
     /* allocation info */
     const char *path;
     unsigned long line;
-    const char *class_path;
-    VALUE mid;
-    size_t generation;
 
     struct allocation_info *next;
 };
 
+#define KEY_PATH    (1<<1)
+#define KEY_LINE    (1<<2)
+#define KEY_TYPE    (1<<3)
+#define KEY_CLASS   (1<<4)
+
+#define VAL_COUNT     (1<<1)
+#define VAL_TOTAL_AGE (1<<2)
+#define VAL_MAX_AGE   (1<<3)
+#define VAL_MIN_AGE   (1<<4)
+
 struct traceobj_arg {
     int running;
+    int keys, vals;
     st_table *aggregate_table;  /* user defined key -> [count, total_age, max_age, min_age] */
     st_table *object_table;     /* obj (VALUE)      -> allocation_info */
     st_table *str_table;        /* cstr             -> refcount */
@@ -39,7 +49,7 @@ keep_unique_str(st_table *tbl, const char *str)
 {
     st_data_t n;
 
-    if (st_lookup(tbl, (st_data_t)str, &n)) {
+    if (str && st_lookup(tbl, (st_data_t)str, &n)) {
 	char *result;
 
 	st_insert(tbl, (st_data_t)str, n+1);
@@ -88,9 +98,12 @@ delete_unique_str(st_table *tbl, const char *str)
     }
 }
 
+/* file, line, type */
+#define MAX_KEY_DATA 4
+
 struct memcmp_key_data {
-    const char *path;
-    int line;
+    int n;
+    st_data_t data[4];
 };
 
 static int
@@ -98,15 +111,14 @@ memcmp_hash_compare(st_data_t a, st_data_t b)
 {
     struct memcmp_key_data *k1 = (struct memcmp_key_data *)a;
     struct memcmp_key_data *k2 = (struct memcmp_key_data *)b;
-
-    return (k1->path == k2->path && k1->line == k2->line) ? 0 : 1;
+    return memcmp(&k1->data[0], &k2->data[0], k1->n * sizeof(st_data_t));
 }
 
 static st_index_t
 memcmp_hash_hash(st_data_t a)
 {
-    struct memcmp_key_data *k1 = (struct memcmp_key_data *)a;
-    return (((st_index_t)k1->path) << 8) & (st_index_t)k1->line;
+    struct memcmp_key_data *k = (struct memcmp_key_data *)a;
+    return rb_memhash(k->data, sizeof(st_data_t) * k->n);
 }
 
 static const struct st_hash_type memcmp_hash_type = {
@@ -120,6 +132,9 @@ get_traceobj_arg(void)
 {
     if (tmp_trace_arg == 0) {
 	tmp_trace_arg = ALLOC_N(struct traceobj_arg, 1);
+	tmp_trace_arg->running = 0;
+	tmp_trace_arg->keys = 0;
+	tmp_trace_arg->vals = VAL_COUNT | VAL_TOTAL_AGE | VAL_MAX_AGE | VAL_MIN_AGE;
 	tmp_trace_arg->aggregate_table = st_init_table(&memcmp_hash_type);
 	tmp_trace_arg->object_table = st_init_numtable();
 	tmp_trace_arg->str_table = st_init_strtable();
@@ -173,7 +188,7 @@ static void
 free_allocation_info(struct traceobj_arg *arg, struct allocation_info *info)
 {
     delete_unique_str(arg->str_table, info->path);
-    delete_unique_str(arg->str_table, info->class_path);
+    delete_unique_str(arg->str_table, info->klass_path);
     ruby_xfree(info);
 }
 
@@ -181,16 +196,15 @@ static void
 newobj_i(VALUE tpval, void *data)
 {
     struct traceobj_arg *arg = (struct traceobj_arg *)data;
+    struct allocation_info *info;
     rb_trace_arg_t *tparg = rb_tracearg_from_tracepoint(tpval);
     VALUE obj = rb_tracearg_object(tparg);
+    VALUE klass = RBASIC_CLASS(obj);
     VALUE path = rb_tracearg_path(tparg);
     VALUE line = rb_tracearg_lineno(tparg);
-    VALUE mid = rb_tracearg_method_id(tparg);
-    VALUE klass = rb_tracearg_defined_class(tparg);
-    struct allocation_info *info;
-    const char *path_cstr = RTEST(path) ? make_unique_str(arg->str_table, RSTRING_PTR(path), RSTRING_LEN(path)) : 0;
-    VALUE class_path = (RTEST(klass) && !OBJ_FROZEN(klass)) ? rb_class_path_cached(klass) : Qnil;
-    const char *class_path_cstr = RTEST(class_path) ? make_unique_str(arg->str_table, RSTRING_PTR(class_path), RSTRING_LEN(class_path)) : 0;
+    VALUE klass_path = (RTEST(klass) && !OBJ_FROZEN(klass)) ? rb_class_path_cached(klass) : Qnil;
+    const char *path_cstr = RTEST(path) ? make_unique_str(arg->str_table, RSTRING_PTR(path), RSTRING_LEN(path)) : NULL;
+    const char *klass_path_cstr = RTEST(klass_path) ? make_unique_str(arg->str_table, RSTRING_PTR(klass_path), RSTRING_LEN(klass_path)) : NULL;
 
     if (st_lookup(arg->object_table, (st_data_t)obj, (st_data_t *)&info)) {
 	if (info->living) {
@@ -198,7 +212,7 @@ newobj_i(VALUE tpval, void *data)
 	}
 	/* reuse info */
 	delete_unique_str(arg->str_table, info->path);
-	delete_unique_str(arg->str_table, info->class_path);
+	delete_unique_str(arg->str_table, info->klass_path);
     }
     else {
 	info = create_allocation_info();
@@ -207,16 +221,17 @@ newobj_i(VALUE tpval, void *data)
     info->next = NULL;
     info->living = 1;
     info->flags = RBASIC(obj)->flags;
-    info->klass = RBASIC_CLASS(obj);
+    info->klass = klass;
+    info->klass_path = klass_path_cstr;
+    info->generation = rb_gc_count();
 
     info->path = path_cstr;
     info->line = NUM2INT(line);
-    info->mid = mid;
-    info->class_path = class_path_cstr;
-    info->generation = rb_gc_count();
+
     st_insert(arg->object_table, (st_data_t)obj, (st_data_t)info);
 }
 
+/* file, line, type, klass */
 #define MAX_KEY_SIZE 4
 
 void
@@ -234,21 +249,40 @@ aggregator_i(void *data)
 	struct memcmp_key_data key_data;
 	int *val_buff;
 	int age = (int)(gc_count - info->generation);
+	int i;
 
-	key_data.path = info->path;
-	key_data.line = info->line;
+	i = 0;
+	if (arg->keys & KEY_PATH) {
+	    key_data.data[i++] = (st_data_t)info->path;
+	}
+	if (arg->keys & KEY_LINE) {
+	    key_data.data[i++] = (st_data_t)info->line;
+	}
+	if (arg->keys & KEY_TYPE) {
+	    key_data.data[i++] = (st_data_t)(info->flags & T_MASK);
+	}
+	if (arg->keys & KEY_CLASS) {
+	    key_data.data[i++] = (st_data_t)info->klass_path;
+	}
+	key_data.n = i;
 	key = (st_data_t)&key_data;
-	keep_unique_str(arg->str_table, info->path);
 
 	if (st_lookup(arg->aggregate_table, key, &val) == 0) {
-	    struct memcmp_key_data *key_buff = ALLOC_N(struct memcmp_key_data, 1);
-	    *key_buff = key_data;
+	    struct memcmp_key_data *key_buff = ruby_xmalloc(sizeof(int) + sizeof(st_data_t) * key_data.n);
+	    key_buff->n = key_data.n;
+
+	    for (i=0; i<key_data.n; i++) {
+		key_buff->data[i] = key_data.data[i];
+	    }
 	    key = (st_data_t)key_buff;
 
 	    /* count, total age, max age, min age */
 	    val_buff = ALLOC_N(int, 4);
 	    val_buff[0] = val_buff[1] = 0;
 	    val_buff[2] = val_buff[3] = age;
+
+	    if (arg->keys & KEY_PATH) keep_unique_str(arg->str_table, info->path);
+	    if (arg->keys & KEY_CLASS) keep_unique_str(arg->str_table, info->klass_path);
 
 	    st_insert(arg->aggregate_table, (st_data_t)key_buff, (st_data_t)val_buff);
 	}
@@ -309,14 +343,94 @@ start_alloc_hooks(VALUE mod)
     rb_tracepoint_enable(freeobj_hook);
 }
 
+static const char *
+type_name(int type)
+{
+    switch (type) {
+#define TYPE_NAME(t) case (t): return #t;
+	TYPE_NAME(T_NONE);
+	TYPE_NAME(T_OBJECT);
+	TYPE_NAME(T_CLASS);
+	TYPE_NAME(T_MODULE);
+	TYPE_NAME(T_FLOAT);
+	TYPE_NAME(T_STRING);
+	TYPE_NAME(T_REGEXP);
+	TYPE_NAME(T_ARRAY);
+	TYPE_NAME(T_HASH);
+	TYPE_NAME(T_STRUCT);
+	TYPE_NAME(T_BIGNUM);
+	TYPE_NAME(T_FILE);
+	TYPE_NAME(T_MATCH);
+	TYPE_NAME(T_COMPLEX);
+	TYPE_NAME(T_RATIONAL);
+	TYPE_NAME(T_NIL);
+	TYPE_NAME(T_TRUE);
+	TYPE_NAME(T_FALSE);
+	TYPE_NAME(T_SYMBOL);
+	TYPE_NAME(T_FIXNUM);
+	TYPE_NAME(T_UNDEF);
+	TYPE_NAME(T_NODE);
+	TYPE_NAME(T_ICLASS);
+	TYPE_NAME(T_ZOMBIE);
+	TYPE_NAME(T_DATA);
+#undef TYPE_NAME
+    }
+    return "unknown";
+}
+
+struct arg_and_result {
+    struct traceobj_arg *arg;
+    VALUE result;
+};
+
 static int
 aggregate_result_i(st_data_t key, st_data_t val, void *data)
 {
-    VALUE result = (VALUE)data;
+    struct arg_and_result *aar = (struct arg_and_result *)data;
+    struct traceobj_arg *arg = aar->arg;
+    VALUE result = aar->result;
+
     int *val_buff = (int *)val;
     struct memcmp_key_data *key_buff = (struct memcmp_key_data *)key;
-    VALUE k = rb_ary_new3(2, rb_str_new2(key_buff->path), INT2FIX(key_buff->line));
     VALUE v = rb_ary_new3(4, INT2FIX(val_buff[0]), INT2FIX(val_buff[1]), INT2FIX(val_buff[2]), INT2FIX(val_buff[3]));
+    VALUE k = rb_ary_new();
+    int i = 0;
+    static VALUE type_symbols[T_MASK] = {0};
+
+    if (type_symbols[0] == 0) {
+	int i;
+	for (i=0; i<T_MASK; i++) {
+	    type_symbols[i] = ID2SYM(rb_intern(type_name(i)));
+	}
+    }
+
+    i = 0;
+    if (arg->keys & KEY_PATH) {
+	const char *path = (const char *)key_buff->data[i++];
+	if (path) {
+	    rb_ary_push(k, rb_str_new2(path));
+	    delete_unique_str(arg->str_table, path);
+	}
+	else {
+	    rb_ary_push(k, Qnil);
+	}
+    }
+    if (arg->keys & KEY_LINE) {
+	rb_ary_push(k, INT2FIX((int)key_buff->data[i++]));
+    }
+    if (arg->keys & KEY_TYPE) {
+	rb_ary_push(k, type_symbols[key_buff->data[i++]]);
+    }
+    if (arg->keys & KEY_CLASS) {
+	const char *klass_path = (const char *)key_buff->data[i++];
+	if (klass_path) {
+	    
+	    delete_unique_str(arg->str_table, klass_path);
+	}
+	else {
+	    rb_ary_push(k, Qnil);
+	}
+    }
 
     rb_hash_aset(result, k, v);
 
@@ -335,24 +449,29 @@ aggregate_rest_object_i(st_data_t key, st_data_t val, void *data)
 static VALUE
 aggregate_result(struct traceobj_arg *arg)
 {
-    VALUE result = rb_hash_new();
+    struct arg_and_result aar;
+    aar.result = rb_hash_new();
+    aar.arg = arg;
+
     st_foreach(arg->object_table, aggregate_rest_object_i, (st_data_t)arg);
     aggregator_i(arg);
-    st_foreach(arg->aggregate_table, aggregate_result_i, (st_data_t)result);
+    st_foreach(arg->aggregate_table, aggregate_result_i, (st_data_t)&aar);
     clear_traceobj_arg();
-    return result;
+    return aar.result;
 }
 
 static VALUE
 stop_allocation_tracing(VALUE self)
 {
-    VALUE newobj_hook = rb_ivar_get(rb_mGCTracer, rb_intern("newobj_hook"));
-    VALUE freeobj_hook = rb_ivar_get(rb_mGCTracer, rb_intern("freeobj_hook"));
+    struct traceobj_arg * arg = get_traceobj_arg();
 
-    /* stop hooks */
-    if (newobj_hook && freeobj_hook) {
+    if (arg->running) {
+	VALUE newobj_hook = rb_ivar_get(rb_mGCTracer, rb_intern("newobj_hook"));
+	VALUE freeobj_hook = rb_ivar_get(rb_mGCTracer, rb_intern("freeobj_hook"));
 	rb_tracepoint_disable(newobj_hook);
 	rb_tracepoint_disable(freeobj_hook);
+
+	arg->running = 0;
     }
     else {
 	rb_raise(rb_eRuntimeError, "not started yet.");
@@ -369,12 +488,16 @@ gc_tracer_stop_allocation_tracing(VALUE self)
 }
 
 VALUE
-gc_tracer_start_allocation_tracing(int argc, VALUE *argv, VALUE self)
+gc_tracer_start_allocation_tracing(VALUE self)
 {
-    if (rb_ivar_get(rb_mGCTracer, rb_intern("allocation_tracer")) != Qnil) {
-	rb_raise(rb_eRuntimeError, "can't run recursive");
+    struct traceobj_arg * arg = get_traceobj_arg();
+
+    if (arg->running) {
+	rb_raise(rb_eRuntimeError, "can't run recursivly");
     }
     else {
+	arg->running = 1;
+	if (arg->keys == 0) arg->keys = KEY_PATH | KEY_LINE;
 	start_alloc_hooks(rb_mGCTracer);
 
 	if (rb_block_given_p()) {
@@ -384,5 +507,50 @@ gc_tracer_start_allocation_tracing(int argc, VALUE *argv, VALUE self)
     }
 
     return Qnil;
+}
+
+VALUE
+gc_tracer_setup_allocation_tracing(int argc, VALUE *argv, VALUE self)
+{
+    struct traceobj_arg * arg = get_traceobj_arg();
+
+    if (arg->running) {
+	rb_raise(rb_eRuntimeError, "can't change configuration during running");
+    }
+    else {
+	int i;
+	VALUE ary = rb_check_array_type(argv[0]);
+
+	for (i=0; i<(int)RARRAY_LEN(ary); i++) {
+	         if (RARRAY_AREF(ary, i) == ID2SYM(rb_intern("path"))) arg->keys |= KEY_PATH;
+	    else if (RARRAY_AREF(ary, i) == ID2SYM(rb_intern("line"))) arg->keys |= KEY_LINE;
+	    else if (RARRAY_AREF(ary, i) == ID2SYM(rb_intern("type"))) arg->keys |= KEY_TYPE;
+	    else if (RARRAY_AREF(ary, i) == ID2SYM(rb_intern("class"))) arg->keys |= KEY_CLASS;
+	    else {
+		rb_raise(rb_eArgError, "not supported key type");
+	    }
+	}
+    }
+
+    return Qnil;
+}
+
+VALUE
+gc_tracer_header_of_allocation_tracing(VALUE self)
+{
+    VALUE ary = rb_ary_new();
+    struct traceobj_arg * arg = get_traceobj_arg();
+
+    if (arg->keys & KEY_PATH) rb_ary_push(ary, ID2SYM(rb_intern("path")));
+    if (arg->keys & KEY_LINE) rb_ary_push(ary, ID2SYM(rb_intern("line")));
+    if (arg->keys & KEY_TYPE) rb_ary_push(ary, ID2SYM(rb_intern("type")));
+    if (arg->keys & KEY_CLASS) rb_ary_push(ary, ID2SYM(rb_intern("class")));
+
+    if (arg->vals & VAL_COUNT) rb_ary_push(ary, ID2SYM(rb_intern("count")));
+    if (arg->vals & VAL_TOTAL_AGE) rb_ary_push(ary, ID2SYM(rb_intern("total_age")));
+    if (arg->vals & VAL_MAX_AGE) rb_ary_push(ary, ID2SYM(rb_intern("max_age")));
+    if (arg->vals & VAL_MIN_AGE) rb_ary_push(ary, ID2SYM(rb_intern("min_age")));
+
+    return ary;
 }
 
