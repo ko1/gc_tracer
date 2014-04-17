@@ -56,26 +56,4 @@ describe GC::Tracer do
     let(:count){2}
     it_behaves_like "objspace_recorder_test"
   end
-
-  describe 'GC::Tracer.start_allocation_tracing' do
-    it 'should includes allocation information' do
-      line = __LINE__ + 2
-      result = GC::Tracer.start_allocation_tracing do
-        Object.new
-      end
-
-      expect(result.length).to be >= 1
-      expect(result[[__FILE__, line]]).to eq [1, 0, 0, 0]
-    end
-
-    it 'should run twice' do
-      line = __LINE__ + 2
-      result = GC::Tracer.start_allocation_tracing do
-        Object.new
-      end
-
-      expect(result.length).to be >= 1
-      expect(result[[__FILE__, line]]).to eq [1, 0, 0, 0]
-    end
-  end
 end
