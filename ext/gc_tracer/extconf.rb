@@ -3,6 +3,8 @@ require 'mkmf'
 # auto generation script
 rusage_members = []
 
+have_func("rb_obj_gc_flags", "ruby/ruby.h");
+
 if  try_link(%q{
       #include "ruby/ruby.h"
       void rb_objspace_each_objects_without_setup(int (*callback)(void *, void *, size_t, void *), void *data);

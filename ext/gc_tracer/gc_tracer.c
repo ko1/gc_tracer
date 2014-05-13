@@ -543,10 +543,16 @@ categorical_color20(int n)
 
 static struct picker_description object_age_picker_description[] = {
     {"empty slot",   0},
-    {"old slot",     0x1f77b4},
+    {"infant slot",  0x1f77b4},
     {"young slot",   0xff7f0e},
-    {"shady slot",   0x2ca02c}
+    {"old slot",     0x2ca02c},
+    {"shady slot",   0xd62728}
 };
+
+#ifdef HAVE_RB_OBJ_GC_FLAGS
+size_t rb_obj_gc_flags(VALUE obj, ID* flags, size_t max);
+static ID id_young;
+#endif
 
 static int
 object_age_picker(VALUE v) {
@@ -554,17 +560,32 @@ object_age_picker(VALUE v) {
 	return 0;
     }
     else {
-	if (OBJ_PROMOTED(v)) {
-	    /* old */
-	    return categorical_color10(0);
-	}
-	else {
+	if (!OBJ_PROMOTED(v)) {
 	    if (OBJ_WB_PROTECTED(v)) {
-		/* young */
-		return categorical_color10(1);
+		return categorical_color10(0); /* infant */
 	    }
 	    else {
-		return categorical_color10(2);
+		return categorical_color10(3); /* shady */
+	    }
+	}
+	else {
+	    int is_young = 0;
+#ifdef HAVE_RB_OBJ_GC_FLAGS
+	    ID ids[8];
+	    size_t i, count = rb_obj_gc_flags(v, ids, 8);
+
+	    for (i=0; i<count; i++) {
+		if (ids[i] == id_young) {
+		    is_young = 1;
+		    break;
+		}
+	    }
+#endif
+	    if (is_young) {
+		return categorical_color10(1); /* young */
+	    }
+	    else {
+		return categorical_color10(2); /* old */
 	    }
 	}
     }
@@ -817,7 +838,13 @@ Init_gc_tracer(void)
     /* setup default banners */
     setup_gc_trace_symbols();
     start_tick = tick();
-    rb_gc_latest_gc_info(ID2SYM(rb_intern("gc_by"))); /* warm up */
+
+    /* warm up */
+    rb_gc_latest_gc_info(ID2SYM(rb_intern("gc_by")));
+#if HAVE_RB_OBJ_GC_FLAGS
+    rb_obj_gc_flags(rb_cObject, NULL, 0);
+    id_young = rb_intern("young");
+#endif
 
     gc_trace_items = rb_ary_new();
     gc_trace_items_types = rb_ary_new();
