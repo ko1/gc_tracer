@@ -40,9 +40,12 @@ This code is equivalent to the following code.
 
 ```ruby
 require 'gc_tracer'
-GC::Tracer.start_logging(filename)
-# do something
-GC::Tracer.stop_logging
+begin
+  GC::Tracer.start_logging(filename)
+  # do something
+ensure
+  GC::Tracer.stop_logging
+end
 ```
 
 In the stored file (filename), you can get tab separated values of:
