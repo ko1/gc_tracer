@@ -841,6 +841,7 @@ Init_gc_tracer(void)
 
     /* warm up */
     rb_gc_latest_gc_info(ID2SYM(rb_intern("gc_by")));
+    rb_gc_stat(ID2SYM(rb_intern("count")));
 #if HAVE_RB_OBJ_GC_FLAGS
     rb_obj_gc_flags(rb_cObject, NULL, 0);
     id_young = rb_intern("young");
