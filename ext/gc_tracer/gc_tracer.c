@@ -11,6 +11,11 @@
 #include <stdio.h>
 #include <assert.h>
 
+#ifdef HAVE_RB_OBJ_GC_FLAGS
+size_t rb_obj_gc_flags(VALUE obj, ID* flags, size_t max);
+static ID id_young;
+#endif
+
 struct gc_hooks {
     VALUE hooks[3];
     VALUE enabled;
@@ -549,11 +554,6 @@ static struct picker_description object_age_picker_description[] = {
     {"shady slot",   0xd62728}
 };
 
-#ifdef HAVE_RB_OBJ_GC_FLAGS
-size_t rb_obj_gc_flags(VALUE obj, ID* flags, size_t max);
-static ID id_young;
-#endif
-
 static int
 object_age_picker(VALUE v) {
     if (RB_TYPE_P(v, T_NONE)) {
@@ -842,7 +842,7 @@ Init_gc_tracer(void)
     /* warm up */
     rb_gc_latest_gc_info(ID2SYM(rb_intern("gc_by")));
     rb_gc_stat(ID2SYM(rb_intern("count")));
-#if HAVE_RB_OBJ_GC_FLAGS
+#ifdef HAVE_RB_OBJ_GC_FLAGS
     rb_obj_gc_flags(rb_cObject, NULL, 0);
     id_young = rb_intern("young");
 #endif
