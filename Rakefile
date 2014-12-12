@@ -15,3 +15,8 @@ task default: :spec
 task :run => 'compile' do
   ruby 'test.rb'
 end
+
+task :gdb => 'compile' do
+  system('gdb --args ruby test.rb')
+end
+

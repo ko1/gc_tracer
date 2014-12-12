@@ -38,6 +38,10 @@ if have_header('sys/time.h') && have_header('sys/resource.h') && have_func('getr
      }
 end
 
+if have_header('time.h')
+  have_func('clock_gettime')
+end
+
 open("gc_tracer.h", 'w'){|f|
   f.puts '#include "ruby/ruby.h"'
   f.puts "static VALUE sym_gc_stat[#{GC.stat.keys.size}];"

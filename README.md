@@ -23,7 +23,7 @@ Or install it yourself as:
 gc_tracer gem adds GC::Tracer module. GC::Tracer module has the following features.
 
 - Logging GC statistics information
-- ObjectSpace recorder
+- ObjectSpace recorder (not supported yet)
 
 ### Logging
 
@@ -56,59 +56,49 @@ In the stored file (filename), you can get tab separated values of:
 
 at each events, there are one of:
 
-* GC starting time
-* End of marking time
-* End of sweeping time
+* GC starting time (start)
+* End of marking time (end_mark)
+* End of sweeping time (end_sweep)
+* GC enter (enter)
+* GC exit (exit)
+* newobj (newobj)
+* freeobj (freeobj)
 
 For one GC, you can get all three lines.
 
-### ObjectSpace recorder
-
-You can records objspace snapshots on each events.  Snapshots are stored 
-in the [PPM (P6) format] (http://en.wikipedia.org/wiki/Netpbm_format).
+You can specify events by event name symbols you want to show.
 
 ```ruby
 require 'gc_tracer'
-GC::Tracer.start_objspace_recording(dirname) do
+begin
+  GC::Tracer.start_logging(filename, events: %i(enter exit))
   # do something
+ensure
+  GC::Tracer.stop_logging
 end
 ```
 
-All PPM images are stored in dirname/ppm/.
-
-If you have netpbm package and pnmtopng command, 
-bin/objspace_recorder_convert.rb converts all ppm images into png files. 
-Converted png images stored into dirname/png/.
-
-To view converted images, "dirname/viewer.html" is created.
-You can view all converted png images with "dirname/viewer.html" file in animation.
-
-This feature is supported only latest Ruby versions (2.2, and later).
-
-#### Example
+Default events are "start", "end_mark" and "end_sweep". You can specify 
+what kind of information you want to collect.
 
 ```ruby
 require 'gc_tracer'
-GC::Tracer.start_objspace_recording("objspace_recorded_type_example", :type){
-  n =  1_000
-  m = 10_000
-
-  n.times{
-    ary = []
-    m.times{
-      ary << ''
-    }
-  }
-}
+begin
+  GC::Tracer.start_logging(filename, gc_stat: false, gc_latest_gc_info: false, rusage: false)
+  # do something
+ensure
+  GC::Tracer.stop_logging
+end
 ```
 
-This program takes all snapshot of type information at each GC events.
+Above example means that no details information are not needed. Default 
+setting is "gc_stat: true, gc_latest_gc_info: true, rusage: false".
 
-- :age (default) - take snapshots of age information (empty/young/old/shady)
-- :type - take snapshots of type information (T_???)
+You can specify tick (time stamp) type with keyword parameter 
+"tick_type". You can choose one of the tick type in :hw_counter, :time 
+and :nano_time.
 
-You can see an [age example] (http://www.atdot.net/~ko1/gc_tracer/objspace_recorded_age_example/viewer.html) and
-a [type example] (http://www.atdot.net/~ko1/gc_tracer/objspace_recorded_type_example/viewer.html).
+See lib/gc_tracer.rb for more details.
 
 ## Contributing
 

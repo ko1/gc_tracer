@@ -28,6 +28,7 @@ describe GC::Tracer do
     it_behaves_like "logging_test"
   end
 
+=begin not supported now.
   shared_examples "objspace_recorder_test" do
     dirname = "gc_tracer_objspace_recorder_spec.#{$$}"
 
@@ -56,4 +57,5 @@ describe GC::Tracer do
     let(:count){2}
     it_behaves_like "objspace_recorder_test"
   end
+=end
 end
