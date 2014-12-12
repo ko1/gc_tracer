@@ -179,6 +179,7 @@ out_time_time(FILE *out)
     }
 }
 
+#ifdef HAVE_CLOCK_GETTIME
 static void
 out_time_nano_time(FILE *out)
 {
@@ -192,6 +193,7 @@ out_time_nano_time(FILE *out)
 	fprintf(out, "%lu\t", (unsigned long)ts.tv_nsec);
     }
 }
+#endif
 
 static void
 out_obj(FILE *out, VALUE obj)
@@ -456,18 +458,24 @@ gc_tracer_setup_logging_tick_type(VALUE self, VALUE sym)
     static const char *names[] = {
 	"none",
 	"hw_counter",
-	"time",
+	"time"
+#ifdef HAVE_CLOCK_GETTIME
+	  ,
 	"nano_time"
+#endif
     };
     static const out_time_func_t funcs[] = {
 	out_time_none,
 	out_time_hw_counter,
-	out_time_time,
+	out_time_time
+#ifdef HAVE_CLOCK_GETTIME
+	  ,
 	out_time_nano_time
+#endif
     };
     int i;
 
-    for (i=0; i<4; i++) {
+    for (i=0; i<(int)(sizeof(funcs)/sizeof(out_time_func_t)); i++) {
 	if (sym == ID2SYM(rb_intern(names[i]))) {
 	    logging->config.out_time_func = funcs[i];
 	    return self;
@@ -582,5 +590,5 @@ Init_gc_tracer_logging(VALUE mod)
     gc_tracer_setup_logging_gc_stat(Qnil, Qtrue);
     gc_tracer_setup_logging_gc_latest_gc_info(Qnil, Qtrue);
     gc_tracer_setup_logging_rusage(Qnil, Qfalse);
-    trace_logging.config.out_time_func = out_time_nano_time;
+    trace_logging.config.out_time_func = out_time_time;
 }

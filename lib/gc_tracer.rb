@@ -8,7 +8,7 @@ module GC
                            # event filter
                            events: %i(start end_mark end_sweep),
                            # tick type (:hw_counter, :time, :user_time, :system_time)
-                           tick_type: :nano_time,
+                           tick_type: :time,
                            # collect information
                            gc_stat: true,
                            gc_latest_gc_info: true,

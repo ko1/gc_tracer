@@ -96,7 +96,7 @@ setting is "gc_stat: true, gc_latest_gc_info: true, rusage: false".
 
 You can specify tick (time stamp) type with keyword parameter 
 "tick_type". You can choose one of the tick type in :hw_counter, :time 
-and :nano_time.
+and :nano_time (if platform supports clock_gettime()).
 
 See lib/gc_tracer.rb for more details.
 
