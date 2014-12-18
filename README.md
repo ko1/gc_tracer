@@ -111,7 +111,8 @@ new statistics line into the logging file.
 For example, the following program insert 1000 custom event lines into 
 logging file (stderr for this type).
 
-```ruby GC::Tracer.start_logging(events: %i(start), gc_stat: false) do
+```ruby
+GC::Tracer.start_logging(events: %i(start), gc_stat: false) do
   1_000.times{|i|
     1_000.times{''}
     GC::Tracer.custom_event_logging("custom_#{i}")
