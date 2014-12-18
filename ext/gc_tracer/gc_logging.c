@@ -289,13 +289,13 @@ out_rusage(struct gc_logging *logging)
 }
 
 static void
-logging_start_i(VALUE tpval, struct gc_logging *logging)
+out_stat(struct gc_logging *logging, const char *event)
 {
 #if HAVE_GETRUSAGE
     logging->filled_rusage = 0;
 #endif
 
-    out_str(logging->out, logging->event);
+    out_str(logging->out, event);
     (logging->config.out_time_func)(logging->out);
 
     if (logging->config.log_gc_stat) out_gc_stat(logging);
@@ -304,6 +304,12 @@ logging_start_i(VALUE tpval, struct gc_logging *logging)
     if (logging->config.log_rusage) out_rusage(logging);
 #endif
     out_terminate(logging->out);
+}
+
+static void
+logging_start_i(VALUE tpval, struct gc_logging *logging)
+{
+    out_stat(logging, logging->event);
 }
 
 static void
@@ -562,6 +568,21 @@ gc_tracer_stop_logging(VALUE self)
     return self;
 }
 
+static VALUE
+gc_tracer_custom_event_logging(VALUE self, VALUE event_str)
+{
+    struct gc_logging *logging = &trace_logging;
+    const char *str = StringValueCStr(event_str);
+
+    if (logging->enabled) {
+	out_stat(logging, str);
+    }
+    else {
+	rb_raise(rb_eRuntimeError, "GC tracer is not enabled.");
+    }
+    return self;
+}
+
 void
 Init_gc_tracer_logging(VALUE mod)
 {
@@ -575,6 +596,9 @@ Init_gc_tracer_logging(VALUE mod)
     rb_define_module_function(mod, "setup_logging_gc_stat=", gc_tracer_setup_logging_gc_stat, 1);
     rb_define_module_function(mod, "setup_logging_gc_latest_gc_info=", gc_tracer_setup_logging_gc_latest_gc_info, 1);
     rb_define_module_function(mod, "setup_logging_rusage=", gc_tracer_setup_logging_rusage, 1);
+
+    /* custom event */
+    rb_define_module_function(mod, "custom_event_logging", gc_tracer_custom_event_logging, 1);
 
     /* setup data */
     setup_gc_trace_symbols();

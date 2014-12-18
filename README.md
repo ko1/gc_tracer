@@ -48,6 +48,8 @@ ensure
 end
 ```
 
+### Setup
+
 In the stored file (filename), you can get tab separated values of:
 
 * `GC.stat()`
@@ -99,6 +101,27 @@ You can specify tick (time stamp) type with keyword parameter
 and :nano_time (if platform supports clock_gettime()).
 
 See lib/gc_tracer.rb for more details.
+
+### Custom events
+
+You can add custom events by your own. Calling 
+`GC::Tracer.custom_event_logging(event_name)` in your program will puts 
+new statistics line into the logging file.
+
+For example, the following program insert 1000 custom event lines into 
+logging file (stderr for this type).
+
+```ruby GC::Tracer.start_logging(events: %i(start), gc_stat: false) do
+  1_000.times{|i|
+    1_000.times{''}
+    GC::Tracer.custom_event_logging("custom_#{i}")
+  }
+end
+```
+
+This method is useful to trace where the GC events occur in your 
+application.
+
 
 ## Contributing
 
