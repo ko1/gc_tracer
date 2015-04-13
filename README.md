@@ -80,7 +80,7 @@ ensure
 end
 ```
 
-Default events are "start", "end_mark" and "end_sweep". You can specify 
+Default events are "start", "end_mark" and "end_sweep". You can specify
 what kind of information you want to collect.
 
 ```ruby
@@ -93,22 +93,45 @@ ensure
 end
 ```
 
-Above example means that no details information are not needed. Default 
+Above example means that no details information are not needed. Default
 setting is "gc_stat: true, gc_latest_gc_info: true, rusage: false".
 
-You can specify tick (time stamp) type with keyword parameter 
-"tick_type". You can choose one of the tick type in :hw_counter, :time 
+You can specify tick (time stamp) type with keyword parameter
+"tick_type". You can choose one of the tick type in :hw_counter, :time
 and :nano_time (if platform supports clock_gettime()).
 
 See lib/gc_tracer.rb for more details.
 
+### Custom fields
+
+You can add custom fields.
+
+```ruby
+GC::Tracer.start_logging(custom_fields: [:name1, :name2, ...]) do
+  # All fields are cleared by zero.
+
+  # You can increment values of each field.
+  GC::Tracer.custom_field_increment(:name1)
+  # It is equivalent to
+  #   GC::Tracer.custom_field_set(:name1, GC::Tracer.custom_field_get(:name1))
+
+  # Now, you can specify only Fixnum as field value.
+  GC::Tracer.custom_field_set(:name2, 123)
+
+  # You can specify an index instead of field name
+  GC::Tracer.custom_field_increment(0) # :name1
+end
+```
+
+Custom fields are printed as last columns.
+
 ### Custom events
 
-You can add custom events by your own. Calling 
-`GC::Tracer.custom_event_logging(event_name)` in your program will puts 
+You can add custom events by your own. Calling
+`GC::Tracer.custom_event_logging(event_name)` in your program will puts
 new statistics line into the logging file.
 
-For example, the following program insert 1000 custom event lines into 
+For example, the following program insert 1000 custom event lines into
 logging file (stderr for this type).
 
 ```ruby
@@ -120,7 +143,7 @@ GC::Tracer.start_logging(events: %i(start), gc_stat: false) do
 end
 ```
 
-This method is useful to trace where the GC events occur in your 
+This method is useful to trace where the GC events occur in your
 application.
 
 

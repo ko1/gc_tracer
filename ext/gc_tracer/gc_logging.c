@@ -66,6 +66,8 @@ tick(void)
 #define MAX_HOOKS 5
 #endif
 
+#define MAX_CUSTOM_FIELDS 128
+
 static VALUE tracer_hooks[MAX_HOOKS];
 static VALUE tracer_acceptable_events[MAX_HOOKS];
 
@@ -77,11 +79,15 @@ struct gc_logging {
 	int log_gc_stat;
 	int log_gc_latest_gc_info;
 	int log_rusage;
+	int log_custom_fields_count;
     } config;
 
     int enabled;
     VALUE enable_hooks[MAX_HOOKS]; /* Symbols */
     int enable_hooks_num; /* 0 to MAX_HOOKS */
+
+    ID custom_field_names[MAX_CUSTOM_FIELDS];
+    long  custom_field_values[MAX_CUSTOM_FIELDS];
 
     FILE *out;
     const char *event;
@@ -136,6 +142,12 @@ static void
 out_sizet(FILE *out, size_t size)
 {
     fprintf(out, "%lu\t", (unsigned long)size);
+}
+
+static void
+out_long(FILE *out, long l)
+{
+    fprintf(out, "%ld\t", l);
 }
 
 static double
@@ -303,6 +315,13 @@ out_stat(struct gc_logging *logging, const char *event)
 #if HAVE_GETRUSAGE
     if (logging->config.log_rusage) out_rusage(logging);
 #endif
+    if (logging->config.log_custom_fields_count > 0) {
+	int i;
+	for (i=0; i<logging->config.log_custom_fields_count; i++) {
+	    out_long(logging->out, logging->custom_field_values[i]);
+	}
+    }
+
     out_terminate(logging->out);
 }
 
@@ -335,6 +354,12 @@ out_header(struct gc_logging *logging)
 	out_header_each(logging, sym_rusage, sizeof(sym_rusage)/sizeof(VALUE));
     }
 #endif
+    if (logging->config.log_custom_fields_count > 0) {
+	int i;
+	for (i=0; i<logging->config.log_custom_fields_count; i++) {
+	    out_str(logging->out, rb_id2name(logging->custom_field_names[i]));
+	}
+    }
     out_terminate(logging->out);
 }
 
@@ -541,6 +566,96 @@ gc_tracer_setup_logging_rusage(VALUE self, VALUE b)
 }
 
 static VALUE
+gc_tracer_setup_logging_custom_fields(VALUE self, VALUE b)
+{
+    struct gc_logging *logging = &trace_logging;
+
+    if (RTEST(b)) {
+	VALUE ary = rb_check_array_type(b);
+	int i;
+
+	logging->config.log_custom_fields_count = RARRAY_LEN(ary);
+
+	for (i=0; i<RARRAY_LEN(ary); i++) {
+	    VALUE name = RARRAY_AREF(ary, i);
+	    ID field_id = rb_to_id(name);
+
+	    if (i >= MAX_CUSTOM_FIELDS) {
+		rb_raise(rb_eRuntimeError, "Number of custome fields exceeds %d", MAX_CUSTOM_FIELDS);
+	    }
+
+	    logging->custom_field_names[i] = field_id;
+	    logging->custom_field_values[i] = 0;
+	}
+    }
+    else {
+	logging->config.log_custom_fields_count = 0;
+    }
+
+    return self;
+}
+
+static long *
+custom_field_value_place(VALUE name)
+{
+    struct gc_logging *logging = &trace_logging;
+    int index;
+
+    if (FIXNUM_P(name)) {
+	index = FIX2INT(name);
+	if (index >= logging->config.log_custom_fields_count) {
+	    rb_raise(rb_eRuntimeError, "Only %d custom fields are available, but %d was specified",
+		     logging->config.log_custom_fields_count, index);
+	}
+    }
+    else {
+	int i;
+	ID nid = rb_to_id(name);
+	for (i=0; i<logging->config.log_custom_fields_count; i++) {
+	    if (nid == logging->custom_field_names[i]) {
+		index = i;
+		goto found;
+	    }
+	}
+	rb_raise(rb_eRuntimeError, "Unkown custom fileds is specified.");
+    }
+  found:
+    return &logging->custom_field_values[index];
+}
+
+static VALUE
+gc_tracer_custom_field_increment(VALUE self, VALUE name)
+{
+    long *valp = custom_field_value_place(name);
+    (*valp)++;
+    return self;
+}
+
+static VALUE
+gc_tracer_custom_field_decrement(VALUE self, VALUE name)
+{
+    long *valp = custom_field_value_place(name);
+    (*valp)--;
+    return self;
+}
+
+static VALUE
+gc_tracer_custom_field_get(VALUE self, VALUE name)
+{
+    long *valp = custom_field_value_place(name);
+    return LONG2NUM(*valp);
+}
+
+static VALUE
+gc_tracer_custom_field_set(VALUE self, VALUE name, VALUE val)
+{
+    long *valp = custom_field_value_place(name);
+    long lval = NUM2LONG(val);
+    *valp = lval;
+    return val;
+}
+
+static VALUE
 gc_tracer_start_logging(int argc, VALUE *argv, VALUE self)
 {
     struct gc_logging *logging = &trace_logging;
@@ -596,6 +711,13 @@ Init_gc_tracer_logging(VALUE mod)
     rb_define_module_function(mod, "setup_logging_gc_stat=", gc_tracer_setup_logging_gc_stat, 1);
     rb_define_module_function(mod, "setup_logging_gc_latest_gc_info=", gc_tracer_setup_logging_gc_latest_gc_info, 1);
     rb_define_module_function(mod, "setup_logging_rusage=", gc_tracer_setup_logging_rusage, 1);
+
+    /* custom fields */
+    rb_define_module_function(mod, "setup_looging_custom_fields=", gc_tracer_setup_logging_custom_fields, 1);
+    rb_define_module_function(mod, "custom_field_increment", gc_tracer_custom_field_increment, 1);
+    rb_define_module_function(mod, "custom_field_decrement", gc_tracer_custom_field_decrement, 1);
+    rb_define_module_function(mod, "custom_field_set", gc_tracer_custom_field_set, 2);
+    rb_define_module_function(mod, "custom_field_get", gc_tracer_custom_field_get, 1);
 
     /* custom event */
     rb_define_module_function(mod, "custom_event_logging", gc_tracer_custom_event_logging, 1);

@@ -12,7 +12,9 @@ module GC
                            # collect information
                            gc_stat: true,
                            gc_latest_gc_info: true,
-                           rusage: false)
+                           rusage: false,
+                           custom_fields: nil
+                         )
       # setup
       raise "do not specify two fienames" if filename && filename_opt
       setup_logging_out(filename_opt || filename)
@@ -22,6 +24,7 @@ module GC
       self.setup_logging_gc_latest_gc_info = gc_latest_gc_info
       self.setup_logging_rusage = rusage
       self.setup_logging_tick_type = tick_type
+      self.setup_looging_custom_fields = custom_fields
 
       if block_given?
         begin
