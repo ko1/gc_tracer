@@ -12,7 +12,7 @@ describe GC::Tracer do
             GC.start
           }
         }
-        expect(File.exist?(logfile)).to be_true
+        expect(File.exist?(logfile)).to be_truthy
         expect(File.read(logfile).split(/\n/).length).to be >= count * 3 + 1
       }
     end
@@ -86,7 +86,7 @@ describe GC::Tracer do
             GC::Tracer.custom_event_logging("out")
           end
 
-          expect(File.exist?(logfile)).to be_true
+          expect(File.exist?(logfile)).to be_truthy
           log = File.read(logfile)
           expect(log.lines[0]).to match /a\tb\tc/
           log.each_line{|line|
