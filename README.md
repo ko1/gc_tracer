@@ -117,10 +117,13 @@ GC::Tracer.start_logging(custom_fields: [:name1, :name2, ...]) do
   # It is equivalent to
   #   GC::Tracer.custom_field_set(:name1, GC::Tracer.custom_field_get(:name1))
 
+  # You can also decrement values
+  GC::Tracer.custom_field_decrement(:name1)
+
   # Now, you can specify only Fixnum as field value.
   GC::Tracer.custom_field_set(:name2, 123)
 
-  # You can specify an index instead of field name
+  # You can specify an index instead of field name (faster than actual name)
   GC::Tracer.custom_field_increment(0) # :name1
 end
 ```
