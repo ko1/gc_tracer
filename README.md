@@ -4,6 +4,8 @@ Trace Garbage Collector activities and output statistics information.
 
 This gem only supports MRI 2.1.0 and later.
 
+[![Build Status](https://travis-ci.org/ko1/gc_tracer.svg)](https://travis-ci.org/ko1/gc_tracer)
+
 ## Installation
 
 Add this line to your application's Gemfile:
