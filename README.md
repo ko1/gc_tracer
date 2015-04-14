@@ -50,6 +50,10 @@ ensure
 end
 ```
 
+If `ENV['GC_TRACER_LOGFILE']` is given, then this value and `pid` (concatenated with '-') is used as filename.
+
+If filename is not given, then all of logs puts onto `stderr`.
+
 ### Setup
 
 In the stored file (filename), you can get tab separated values of:
@@ -57,6 +61,7 @@ In the stored file (filename), you can get tab separated values of:
 * `GC.stat()`
 * `GC.latest_gc_info()`
 * `getrusage()` (if supported by system)
+* Custom fields (described bloew)
 
 at each events, there are one of:
 
@@ -151,6 +156,29 @@ end
 This method is useful to trace where the GC events occur in your
 application.
 
+
+## Rack middleware
+
+You can insert Rack middleware to record and view GC Tracer log.
+
+```ruby
+require 'rack'
+require 'sinatra'
+require 'rack/gc_tracer'
+
+use Rack::GCTracerMiddleware, view_page_path: '/gc_tracer'
+
+get '/' do
+  'foo'
+end
+```
+
+You can pass two options.
+
+* logging_filename: File name of GC Tracer log
+* view_page_path: You can view GC tracer log with this path *if logging_filename is given*. You should not use this option on production.
+
+And also you can pass all options (except filename) of `GC::Tracer.start_logging`.
 
 ## Contributing
 
