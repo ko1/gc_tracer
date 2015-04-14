@@ -139,6 +139,12 @@ out_terminate(FILE *out)
 }
 
 static void
+out_flush(FILE *out)
+{
+    fflush(out);
+}
+
+static void
 out_sizet(FILE *out, size_t size)
 {
     fprintf(out, "%lu\t", (unsigned long)size);
@@ -684,6 +690,20 @@ gc_tracer_stop_logging(VALUE self)
 }
 
 static VALUE
+gc_tracer_flush_logging(VALUE self)
+{
+    struct gc_logging *logging = &trace_logging;
+
+    if (logging->enabled) {
+	out_flush(logging->out);
+    }
+    else {
+	rb_raise(rb_eRuntimeError, "GC tracer is not enabled.");
+    }
+    return self;
+}
+
+static VALUE
 gc_tracer_custom_event_logging(VALUE self, VALUE event_str)
 {
     struct gc_logging *logging = &trace_logging;
@@ -703,6 +723,7 @@ Init_gc_tracer_logging(VALUE mod)
 {
     rb_define_module_function(mod, "start_logging_", gc_tracer_start_logging, 0);
     rb_define_module_function(mod, "stop_logging", gc_tracer_stop_logging, 0);
+    rb_define_module_function(mod, "flush_logging", gc_tracer_flush_logging, 0);
 
     /* setup */
     rb_define_module_function(mod, "setup_logging_out", gc_tracer_setup_logging_out, 1);
