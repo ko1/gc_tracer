@@ -3,6 +3,14 @@ require 'gc_tracer/gc_tracer'
 
 module GC
   module Tracer
+    def self.env_logging_filename
+      if fn = ENV['GC_TRACER_LOGFILE']
+        "#{fn}-#{Process.pid}"
+      else
+        nil
+      end
+    end
+
     def self.start_logging(filename_opt = nil,
                            filename: nil,
                            # event filter
@@ -17,7 +25,7 @@ module GC
                          )
       # setup
       raise "do not specify two fienames" if filename && filename_opt
-      setup_logging_out(filename_opt || filename)
+      setup_logging_out(filename_opt || filename || env_logging_filename)
       setup_logging_events(*events)
 
       self.setup_logging_gc_stat = gc_stat
