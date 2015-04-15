@@ -178,10 +178,12 @@ In this case, you can access two pages.
 * http://host/gc_tracer - HTML table style page
 * http://host/gc_tracer/text - plain text page
 
+This Rack middleware supports one custom field *access* to count accesses number.
+
 You can pass two options.
 
 * filename: File name of GC Tracer log
-* view_page_path: You can view GC tracer log with this path *if logging_filename is given*. You should not use this option on production.
+* view_page_path: You can view GC tracer log with this path *if a logging filename is given* (by an env val or a filename keyword argument). You may not use this option on production.
 
 And also you can pass all options of `GC::Tracer.start_logging`.
 
