@@ -180,6 +180,14 @@ In this case, you can access two pages.
 
 This Rack middleware supports one custom field *access* to count accesses number.
 
+The following pages are demonstration Rails app on Heroku environment.
+
+* http://protected-journey-7206.herokuapp.com/gc_tracer
+* http://protected-journey-7206.herokuapp.com/gc_tracer/text
+
+Source code of this demo app is https://github.com/ko1/tracer_demo_rails_app.
+You only need to modify like https://github.com/ko1/tracer_demo_rails_app/blob/master/config.ru to use it on Rails.
+
 You can pass two options.
 
 * filename: File name of GC Tracer log
