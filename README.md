@@ -61,7 +61,7 @@ In the stored file (filename), you can get tab separated values of:
 * `GC.stat()`
 * `GC.latest_gc_info()`
 * `getrusage()` (if supported by system)
-* Custom fields (described bloew)
+* Custom fields (described below)
 
 at each events, there are one of:
 
