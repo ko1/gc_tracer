@@ -6,10 +6,10 @@ require 'gc_tracer'
 
 module Rack
   class GCTracerMiddleware
-    def initialize app, view_page_path: nil, filename: nil, **kw
+    def initialize app, view_page_path: nil, filename: nil, logging_filename: nil, **kw
       @app = app
       @view_page_path = view_page_path
-      @logging_filename = filename || GC::Tracer.env_logging_filename
+      @logging_filename = filename || logging_filename || GC::Tracer.env_logging_filename
 
       if @logging_filename && view_page_path
         @view_page_pattern = /\A#{view_page_path}/
