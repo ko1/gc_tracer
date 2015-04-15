@@ -166,19 +166,24 @@ require 'rack'
 require 'sinatra'
 require 'rack/gc_tracer'
 
-use Rack::GCTracerMiddleware, view_page_path: '/gc_tracer'
+use Rack::GCTracerMiddleware, view_page_path: '/gc_tracer', filename: 'logging_file_name'
 
 get '/' do
   'foo'
 end
 ```
 
+In this case, you can access two pages.
+
+* http://host/gc_tracer - HTML table style page
+* http://host/gc_tracer/text - plain text page
+
 You can pass two options.
 
-* logging_filename: File name of GC Tracer log
+* filename: File name of GC Tracer log
 * view_page_path: You can view GC tracer log with this path *if logging_filename is given*. You should not use this option on production.
 
-And also you can pass all options (except filename) of `GC::Tracer.start_logging`.
+And also you can pass all options of `GC::Tracer.start_logging`.
 
 ## Contributing
 
