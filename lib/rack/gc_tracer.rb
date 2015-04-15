@@ -17,7 +17,7 @@ module Rack
         @view_page_pattern = nil
       end
 
-      GC::Tracer.start_logging @logging_filename, custom_fields: %i(accesses), **kw
+      GC::Tracer.start_logging @logging_filename, rusage: true, custom_fields: %i(accesses), **kw
     end
 
     def make_page
