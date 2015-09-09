@@ -734,7 +734,7 @@ Init_gc_tracer_logging(VALUE mod)
     rb_define_module_function(mod, "setup_logging_rusage=", gc_tracer_setup_logging_rusage, 1);
 
     /* custom fields */
-    rb_define_module_function(mod, "setup_looging_custom_fields=", gc_tracer_setup_logging_custom_fields, 1);
+    rb_define_module_function(mod, "setup_logging_custom_fields=", gc_tracer_setup_logging_custom_fields, 1);
     rb_define_module_function(mod, "custom_field_increment", gc_tracer_custom_field_increment, 1);
     rb_define_module_function(mod, "custom_field_decrement", gc_tracer_custom_field_decrement, 1);
     rb_define_module_function(mod, "custom_field_set", gc_tracer_custom_field_set, 2);
