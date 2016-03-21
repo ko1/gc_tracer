@@ -161,7 +161,7 @@ timeval2double(struct timeval *tv)
 {
     return tv->tv_sec * 1000000LL + tv->tv_usec;
 }
-
+#if HAVE_GETRUSAGE
 static void
 fill_rusage(struct gc_logging *logging)
 {
@@ -170,7 +170,7 @@ fill_rusage(struct gc_logging *logging)
 	getrusage(RUSAGE_SELF, &logging->rusage);
     }
 }
-
+#endif
 static void
 out_time_none(FILE *out)
 {
@@ -253,6 +253,7 @@ out_gc_latest_gc_info(struct gc_logging *logging)
     }
 }
 
+#if HAVE_GETRUSAGE
 static void
 out_rusage(struct gc_logging *logging)
 {
@@ -305,6 +306,7 @@ out_rusage(struct gc_logging *logging)
 #endif
 
 }
+#endif
 
 static void
 out_stat(struct gc_logging *logging, const char *event)
