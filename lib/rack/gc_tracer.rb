@@ -36,7 +36,6 @@ module Rack
     def call env
       if @view_page_pattern && @view_page_pattern =~ env["PATH_INFO"]
         GC::Tracer.flush_logging
-        p env["PATH_INFO"]
         if env["PATH_INFO"] == @view_page_path + "/text"
           [200, {"Content-Type" => "text/plain"}, [open(@logging_filename).read]]
         else
